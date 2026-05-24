@@ -233,7 +233,8 @@ class CometTUI(App):
         if not hasattr(self, "pastResponses"):
             self.pastResponses = set()
             
-        systemPrompt = open("comet\system.md", "r", encoding="utf-8").read()
+        systemPath = os.path.join(os.path.dirname(__file__), "system.md")
+        systemPrompt = open(systemPath, "r", encoding="utf-8").read()
         systemPrompt += f"\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE. They are just for tone/style reference):\n{self.commits}"
         
         promptContent = f"Diff to summarize:\n```diff\n{self.diff}\n```"
