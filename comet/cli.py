@@ -1,23 +1,59 @@
 import colorama
-from httpx import __name
-from ollama import chat, ChatResponse, Client
+from ollama import chat as ollama_chat, Client as OllamaClient
+from openai import OpenAI
 import argparse
 import subprocess
 import os
+import urllib.request
+import urllib.error
+
+def check_endpoint(url):
+    try:
+        urllib.request.urlopen(url, timeout=1.0)
+        return True
+    except (urllib.error.URLError, ValueError):
+        return False
 
 def main():
-    client = Client()
-    allModelsData = sorted(client.list().models, key=lambda m:m.size, reverse=False)
-    allModels = [m.model for m in allModelsData]
-    
-    loadedModels = client.ps().models
-    initialModel = loadedModels[0].model if loadedModels else allModels[0]
+    parser = argparse.ArgumentParser(description="Comet - AI commit message generator")
+    parser.add_argument("--provider", choices=["auto", "ollama", "lmstudio"], default="auto", help="Choose AI provider")
+    args = parser.parse_args()
+
+    provider = args.provider
+
+    if provider == "auto":
+        lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
+        ollamaUp = check_endpoint("http://localhost:11434/api/tags")
+        if lmstudioUp and not ollamaUp:
+            provider = "lmstudio"
+        else:
+            provider = "ollama"
+
+    client = None
+    allModels = []
+    initialModel = ""
+
+    if provider == "ollama":
+        client = OllamaClient()
+        allModelsData = sorted(client.list().models, key=lambda m:m.size, reverse=False)
+        allModels = [m.model for m in allModelsData]
+        
+        loadedModels = client.ps().models
+        initialModel = loadedModels[0].model if loadedModels else (allModels[0] if allModels else "unknown")
+    elif provider == "lmstudio":
+        client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+        try:
+            modelsData = client.models.list().data
+            allModels = [m.id for m in modelsData]
+            initialModel = allModels[0] if allModels else "unknown"
+        except Exception:
+            allModels = ["unknown"]
+            initialModel = "unknown"
 
     diff = subprocess.run(["git", "diff", "HEAD", "-U5"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     commits = subprocess.run(["git", "log", "-n", "5", "--oneline"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     
-    promptContent = f"Diff to summarize:\n```diff\n{diff}\n```"
-    app = CometTUI(commit="Generating...", model=initialModel, diff=diff, commits=commits, allModels=allModels)
+    app = CometTUI(commit="Generating...", model=initialModel, diff=diff, commits=commits, allModels=allModels, provider=provider, client=client)
     result = app.run()
     if result: print(result)
 
@@ -151,13 +187,15 @@ class CometTUI(App):
         Binding("tab", "swap_model", "Swap Model", priority=True)
     ]
 
-    def __init__(self, commit: str, model: str, diff: str, commits: str, allModels: list[str]):
+    def __init__(self, commit: str, model: str, diff: str, commits: str, allModels: list[str], provider: str = "ollama", client = None):
         super().__init__()
         self.commit = commit
         self.model = model
         self.diff = diff
         self.commits = commits
         self.allModels = allModels
+        self.provider = provider
+        self.client = client
 
     def compose(self) -> ComposeResult:
         with Vertical(id="main_container"):
@@ -247,11 +285,19 @@ class CometTUI(App):
                 messages.append({"role": "assistant", "content": pastResponse})
                 messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
                 
-            response = chat(model=self.model, messages=messages, options={"temperature": 0.9}, think=False, keep_alive="60m", stream=True)
-            message = ""
-            for chunk in response:
-                message += chunk['message']['content']
-                self.call_from_thread(self.update_textarea, message, False)
+            if self.provider == "ollama":
+                response = ollama_chat(model=self.model, messages=messages, options={"temperature": 0.9}, think=False, keep_alive="60m", stream=True)
+                message = ""
+                for chunk in response:
+                    message += chunk['message']['content']
+                    self.call_from_thread(self.update_textarea, message, False)
+            elif self.provider == "lmstudio":
+                response = self.client.chat.completions.create(model=self.model, messages=messages, temperature=0.9, stream=True)
+                message = ""
+                for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        message += chunk.choices[0].delta.content
+                        self.call_from_thread(self.update_textarea, message, False)
             
             if message not in self.pastResponses:
                 self.pastResponses.add(message)
