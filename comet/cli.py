@@ -21,13 +21,27 @@ from textual.app import App, ComposeResult
 from textual.widgets import TextArea, Button, Label
 from textual.containers import Horizontal, Vertical
 from textual.binding import Binding
-from textual import work
+from textual import work, events
 import subprocess, colorama
 
 class CustomTextArea(TextArea):
-    BINDINGS = [
-        Binding("enter", "commit_action", "Commit/Sync", priority=True)
-    ]
+    Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+    Binding("ctrl+t", "exit_action", "Terminate", priority=True)
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key == "ctrl":
+            print("key pressed")
+            self.shift_pressed = True
+            event.prevent_default()
+        elif event.key == "enter":
+            if getattr(self, "shift_pressed", False):
+                self.insert("\n")
+                self.shift_pressed = False
+            else:
+                self.app.action_commit_action()
+            event.prevent_default()
+        else:
+            self.shift_pressed = False
 
     def action_cursor_down(self, select: bool = False) -> None:
         if self.cursor_location[0] == self.document.line_count - 1:
@@ -38,11 +52,12 @@ class CustomTextArea(TextArea):
         else:
             super().action_cursor_down(select=select)
 
-    def action_insert_newline(self) -> None:
-        self.insert("\n")
-
-    def action_commit_action(self) -> None:
-        self.app.action_commit_action()
+    def action_cursor_up(self, select: bool = False) -> None:
+        row = self.cursor_location[0]
+        if row > 0 and row == self.document.line_count - 1 and len(self.document.get_line(row)) == 0:
+            self.action_delete_left()
+        else:
+            super().action_cursor_up(select=select)
 
 class CometTUI(App):
     DEFAULT_CSS = """
@@ -128,11 +143,6 @@ class CometTUI(App):
     }
     """
 
-    BINDINGS = [
-        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
-        Binding("ctrl+t", "exit_action", "Terminate", priority=True)
-    ]
-
     def __init__(self, commit: str, model: str, diff: str, commits: str):
         super().__init__()
         self.commit = commit
@@ -148,7 +158,7 @@ class CometTUI(App):
             with Horizontal(id="action_row"):
                 yield Button(" ✔   Commit", id="commitBtn")
                 yield Button(" 🗙   Terminate", id="cancelBtn")
-            yield Label("[b]ctrl+r[/b] regenerate    [b]ctrl+t[/b] terminate    [b]enter[/b] continue    [b]shift+enter[/b] newline", id="shortcuts")
+            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]↓ / ↑[/b][/white] [gray]add / rm line[/gray]", id="shortcuts")
 
     def action_regenerate_action(self) -> None:
         regen_btn = self.query_one("#regenBtn", Button)
