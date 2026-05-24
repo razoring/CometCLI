@@ -228,6 +228,8 @@ class CometTUI(App):
             yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]tab[/b][/white] [gray]swap model[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]    [white][b]↓/↑[/b][/white] [gray]move lines[/gray]    [white][b]esc[/b][/white] [gray]quit[/gray]", id="shortcuts")
 
     def action_swap_model(self) -> None:
+        if self.query_one("#input_row").has_class("committed"):
+            return
         if not self.allModels: return
         try:
             currentIndex = self.allModels.index(self.model)
@@ -251,7 +253,7 @@ class CometTUI(App):
         if not commitBtn.disabled:
             commitBtn.press()
 
-    def action_undo_commit(self) -> None:
+    def undo(self) -> None:
         commitBtn = self.query_one("#commitBtn", Button)
         if str(commitBtn.label).strip() == "Sync  ➤":
             subprocess.run(["git", "reset", "HEAD~1"], capture_output=True)
@@ -263,6 +265,7 @@ class CometTUI(App):
             textArea.disabled = False
             input_row = self.query_one("#input_row")
             input_row.remove_class("committed")
+            self.query_one("#regenBtn").disabled = False
 
     def on_mount(self) -> None:
         if self.provider == "auto" or self.model == "Loading...":
@@ -354,12 +357,13 @@ class CometTUI(App):
             textArea.disabled = True
             input_row = self.query_one("#input_row")
             input_row.add_class("committed")
+            self.query_one("#regenBtn").disabled = True
             
         elif event.button.id == "cancelBtn":
             self.exit(f"{colorama.Fore.RED}User cancelled the operation. {colorama.Style.RESET_ALL}")
 
         elif event.button.id == "undoBtn":
-            self.action_undo_commit()
+            self.undo()
             
         elif event.button.id == "regenBtn":
             event.button.disabled = True
