@@ -11,7 +11,7 @@ def main():
     diff = subprocess.run(["git", "diff", "HEAD", "-U0"], cwd=os.getcwd(), capture_output=True, text=True, check=True).stdout
     
     #print(diff)
-    print({"role": "user", "content": f"```diff\n{diff}\n```"})
+    #print({"role": "user", "content": f"```diff\n{diff}\n```"})
     response:ChatResponse = chat(model=models[0].model, messages=[{"role": "system", "content": open("comet\system.md","r").read()}, {"role": "user", "content": f"```diff\n{diff}\n```"}], think=False, keep_alive=-1)
     print(response.message.content)
 
