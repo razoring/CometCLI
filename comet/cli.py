@@ -65,8 +65,10 @@ from textual import work, events
 import subprocess, colorama
 
 class CustomTextArea(TextArea):
-    Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
-    Binding("ctrl+t", "exit_action", "Terminate", priority=True)
+    BINDINGS = [
+        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+        Binding("escape", "exit_action", "Terminate", priority=True)
+    ]
 
     def on_key(self, event: events.Key) -> None:
         if event.key == "enter":
@@ -182,7 +184,7 @@ class CometTUI(App):
 
     BINDINGS = [
         Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
-        Binding("ctrl+t", "exit_action", "Terminate", priority=True),
+        Binding("escape", "exit_action", "Quit", priority=True),
         Binding("ctrl+z", "undo_commit", "Undo Commit", priority=True),
         Binding("tab", "swap_model", "Swap Model", priority=True)
     ]
@@ -205,9 +207,9 @@ class CometTUI(App):
                 yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
                 yield Button(" ₊✦  Regenerate  ", id="regenBtn")
             with Horizontal(id="action_row"):
-                yield Button(" ✔   Commit", id="commitBtn")
-                yield Button(" 🗙   Terminate", id="cancelBtn")
-            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]tab[/b][/white] [gray]swap model[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]    [white][b]↓/↑[/b][/white] [gray]move lines[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]", id="shortcuts")
+                yield Button(" ✔   Commit ", id="commitBtn")
+                yield Button(" 🗙   Quit ", id="cancelBtn")
+            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]tab[/b][/white] [gray]swap model[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]    [white][b]↓/↑[/b][/white] [gray]move lines[/gray]    [white][b]esc[/b][/white] [gray]quit[/gray]", id="shortcuts")
 
     def action_swap_model(self) -> None:
         if not self.allModels: return
