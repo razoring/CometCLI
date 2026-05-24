@@ -30,6 +30,9 @@ class CustomTextArea(TextArea):
         Binding("enter", "commit_action", "Commit/Sync", priority=True)
     ]
 
+    def action_insert_newline(self) -> None:
+        self.insert("\n")
+
     def action_commit_action(self) -> None:
         self.app.action_commit_action()
 
