@@ -20,6 +20,7 @@ def main():
 from textual.app import App, ComposeResult
 from textual.widgets import TextArea, Button, Label
 from textual.containers import Horizontal, Vertical
+from textual.binding import Binding
 from textual import work
 import subprocess, colorama
 
@@ -108,9 +109,9 @@ class CometTUI(App):
     """
 
     BINDINGS = [
-        ("tab", "commit_action", "Commit/Sync"),
-        ("ctrl+r", "regenerate_action", "Regenerate (Focus)"),
-        ("ctrl+q", "exit_action", "Exit (Focus)")
+        Binding("ctrl+enter", "commit_action", "Commit/Sync", priority=True),
+        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+        Binding("ctrl+q", "exit_action", "Quit", priority=True)
     ]
 
     def __init__(self, commit: str, model: str, diff: str, commits: str):
@@ -128,7 +129,7 @@ class CometTUI(App):
             with Horizontal(id="action_row"):
                 yield Button("✔   Commit", id="commitBtn")
                 yield Button("🗙   Quit", id="cancelBtn")
-            yield Label("[b]ctrl+r[/b] regenerate    [b]ctrl+q[/b] quit    [b]tab[/b] continue", id="shortcuts")
+            yield Label("[b]ctrl+r[/b] regenerate    [b]ctrl+q[/b] quit    [b]ctrl+enter[/b] continue", id="shortcuts")
 
     def action_regenerate_action(self) -> None:
         regen_btn = self.query_one("#regenBtn", Button)
@@ -197,8 +198,6 @@ class CometTUI(App):
                 self.past_responses.add(message)
                 self.call_from_thread(self.update_textarea, message, True)
                 break
-            else:
-                self.call_from_thread(self.update_textarea, "", False)
 
     def update_textarea(self, message: str, finished: bool) -> None:
         text_area = self.query_one("#input", TextArea)
