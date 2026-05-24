@@ -1,8 +1,0 @@
-pyproject.toml
-comet/__init__.py
-comet/cli.py
-comet.egg-info/PKG-INFO
-comet.egg-info/SOURCES.txt
-comet.egg-info/dependency_links.txt
-comet.egg-info/entry_points.txt
-comet.egg-info/top_level.txt
