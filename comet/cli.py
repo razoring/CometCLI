@@ -227,7 +227,7 @@ class CometTUI(App):
                 yield Button(" ✔   Commit ", id="commitBtn")
                 undo.display = False
                 yield undo
-                yield Button(" 🗙   Quit ", id="cancelBtn")
+                yield Button(" ⛌   Quit ", id="cancelBtn")
             yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
 
     def action_swap_model(self) -> None:
