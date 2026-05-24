@@ -19,6 +19,7 @@ def main():
     with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
         f.write(message)
         temp = f.name
+
     # trigger git commit, passing the file, forcing the editor to open, and staging all modified files (-a)
     subprocess.run(["git", "commit", "-a", "-F", temp, "-e"])
     try: os.remove(temp)
