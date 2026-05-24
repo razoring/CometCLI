@@ -29,19 +29,9 @@ class CustomTextArea(TextArea):
     Binding("ctrl+t", "exit_action", "Terminate", priority=True)
 
     def on_key(self, event: events.Key) -> None:
-        if event.key == "ctrl":
-            print("key pressed")
-            self.shift_pressed = True
+        if event.key == "enter":
+            self.app.action_commit_action()
             event.prevent_default()
-        elif event.key == "enter":
-            if getattr(self, "shift_pressed", False):
-                self.insert("\n")
-                self.shift_pressed = False
-            else:
-                self.app.action_commit_action()
-            event.prevent_default()
-        else:
-            self.shift_pressed = False
 
     def action_cursor_down(self, select: bool = False) -> None:
         if self.cursor_location[0] == self.document.line_count - 1:
@@ -143,6 +133,12 @@ class CometTUI(App):
     }
     """
 
+    BINDINGS = [
+        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+        Binding("ctrl+t", "exit_action", "Terminate", priority=True),
+        Binding("ctrl+z", "undo_commit", "Undo Commit", priority=True)
+    ]
+
     def __init__(self, commit: str, model: str, diff: str, commits: str):
         super().__init__()
         self.commit = commit
@@ -158,7 +154,7 @@ class CometTUI(App):
             with Horizontal(id="action_row"):
                 yield Button(" ✔   Commit", id="commitBtn")
                 yield Button(" 🗙   Terminate", id="cancelBtn")
-            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]↓ / ↑[/b][/white] [gray]add / rm line[/gray]", id="shortcuts")
+            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]↓ / ↑[/b][/white] [gray]add / rm line[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]", id="shortcuts")
 
     def action_regenerate_action(self) -> None:
         regen_btn = self.query_one("#regenBtn", Button)
@@ -172,6 +168,12 @@ class CometTUI(App):
         commit_btn = self.query_one("#commitBtn", Button)
         if not commit_btn.disabled:
             commit_btn.press()
+
+    def action_undo_commit(self) -> None:
+        commit_btn = self.query_one("#commitBtn", Button)
+        if str(commit_btn.label).strip() == "Sync  ➤":
+            subprocess.run(["git", "reset", "HEAD~1"], capture_output=True)
+            commit_btn.label = " ✔   Commit"
 
     def on_mount(self) -> None:
         self.query_one("#input_row").border_title = "Comet CLI"
