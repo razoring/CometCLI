@@ -154,7 +154,7 @@ class CometTUI(App):
             with Horizontal(id="action_row"):
                 yield Button(" ✔   Commit", id="commitBtn")
                 yield Button(" 🗙   Terminate", id="cancelBtn")
-            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]↓ / ↑[/b][/white] [gray]add / rm line[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]", id="shortcuts")
+            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]    [white][b]↓/↑[/b][/white] [gray]move lines[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]", id="shortcuts")
 
     def action_regenerate_action(self) -> None:
         regen_btn = self.query_one("#regenBtn", Button)
