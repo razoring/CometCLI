@@ -37,4 +37,4 @@ Use the imperative, present tense mood. Be concise but highly descriptive. If th
 You must output exactly one line in the following format:
 <type>: <description>
 
-Do not add any additional explanation, markdown formatting, or introductory text. Only output the final commit message.
+Do not add any additional explanation, markdown formatting, or introductory text. Only output the final commit message. Do not add a dash in the beginning
