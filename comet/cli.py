@@ -110,7 +110,7 @@ class CometTUI(App):
                 yield TextArea(self.commit, id="input", show_line_numbers=False)
                 yield Button(" ₊✦  Regenerate ", id="regenBtn")
             with Horizontal(id="action_row"):
-                yield Button("Commit   ➤", id="commitBtn")
+                yield Button("✔   Commit", id="commitBtn")
                 yield Button("🗙   Exit", id="cancelBtn")
 
     def on_mount(self) -> None:
@@ -120,18 +120,18 @@ class CometTUI(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "commitBtn":
-            if str(event.button.label).strip() == "Sync   모":
+            if str(event.button.label).strip() == "Sync  ➤":
                 event.button.label = "Syncing..."
                 event.button.disabled = True
-                subprocess.run(["git", "push"])
+                subprocess.run(["git", "push"], capture_output=True)
                 self.exit(f"{colorama.Fore.GREEN}Comet committed and synced successfully! {colorama.Style.RESET_ALL}")
                 return
 
             text_area = self.query_one("#input", TextArea)
             final_message = text_area.text
             
-            subprocess.run(["git", "commit", "-a", "-m", final_message])
-            event.button.label = "Sync   모"
+            subprocess.run(["git", "commit", "-a", "-m", final_message], capture_output=True)
+            event.button.label = "Sync  ➤"
             
         elif event.button.id == "cancelBtn":
             self.exit(f"{colorama.Fore.RED}User cancelled the operation. {colorama.Style.RESET_ALL}")
@@ -144,8 +144,8 @@ class CometTUI(App):
 
     @work(thread=True)
     def regenerate(self) -> None:
-        prompt_content = f"Recent Commits (For Context Only):\n{self.commits}\n\nDiff to summarize:\n```diff\n{self.diff}\n```"
-        response = chat(model=self.model, messages=[{"role": "system", "content": open("comet\system.md","r", encoding="utf-8").read()}, {"role": "user", "content": prompt_content}], think=False, keep_alive=-1, stream=True)
+        prompt_content = f"Diff to summarize:\n```diff\n{self.diff}\n```\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE):\n{self.commits}"
+        response = chat(model=self.model, messages=[{"role": "system", "content": open("comet\system.md","r", encoding="utf-8").read()}, {"role": "user", "content": prompt_content}], options={"temperature": 0.7}, think=False, keep_alive=-1, stream=True)
         message = ""
         for chunk in response:
             message += chunk['message']['content']
