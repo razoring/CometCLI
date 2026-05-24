@@ -33,8 +33,18 @@ Read the diff carefully and choose exactly ONE of the following standard convent
 Analyze the diff to understand the *high-level intent* and *functional purpose* of the changes. Do not just blindly list what lines were added or removed. Instead, explain *what the code actually accomplishes* in the context of the larger project.
 Use the imperative, present tense mood. Be concise but highly descriptive. If the diff shows the introduction of a new library or UI framework, mention its purpose. Keep it abstract and functional rather than a literal line-by-line translation.
 
-### EXPECTED OUTPUT FORMAT
-You must output exactly one line in the following format:
-<type>: <description>
+### CRITICAL OUTPUT FORMAT RULES
+You MUST adhere to the following rules or your output will break the system:
+1. OUTPUT EXACTLY ONE LINE. Do NOT output a list of multiple options or types.
+2. DO NOT use any markdown formatting whatsoever (no bold `**`, no italics, no code blocks ` ``` `).
+3. DO NOT start the line with a bullet point, dash (`-`), or asterisk (`*`).
+4. DO NOT add any introductory or concluding text (e.g. no "Here is the commit message:").
 
-Do not add any additional explanation, markdown formatting, or introductory text. Only output the final commit message. Do not add a dash in the beginning
+The ONLY output you provide should be the raw, plain-text string matching this exact pattern:
+type: description
+
+Example of CORRECT output:
+feat: implement asynchronous network checking for zero latency boot
+
+Example of INCORRECT output:
+- **feat:** implement asynchronous network checking
