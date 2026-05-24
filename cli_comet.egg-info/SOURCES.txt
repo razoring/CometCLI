@@ -1,0 +1,14 @@
+LICENSE
+MANIFEST.in
+README.md
+pyproject.toml
+setup.cfg
+cli_comet.egg-info/PKG-INFO
+cli_comet.egg-info/SOURCES.txt
+cli_comet.egg-info/dependency_links.txt
+cli_comet.egg-info/entry_points.txt
+cli_comet.egg-info/requires.txt
+cli_comet.egg-info/top_level.txt
+comet/__init__.py
+comet/cli.py
+comet/system.md

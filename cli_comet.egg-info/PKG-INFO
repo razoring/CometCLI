@@ -1,0 +1,80 @@
+Metadata-Version: 2.4
+Name: cli-comet
+Version: 1.0.0
+Summary: A terminal UI that automatically generates git commit messages using local language models via Ollama.
+Home-page: https://github.com/razoring/CometCLI
+Author: razoring
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Environment :: Console
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: ollama
+Requires-Dist: textual
+Requires-Dist: colorama
+Dynamic: license-file
+
+# Comet
+
+Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models via Ollama. It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes.
+
+## Features
+
+- Local Model Generation: Connects to your local Ollama instance to generate commit messages privately.
+- Model Swapping: Press `tab` to cycle through available local models directly from the interface. Comet defaults to your currently loaded model to save time.
+- Context Aware: Automatically pulls in the last 5 commits to understand the tone and style of your project.
+- Terminal User Interface: Built with Textual. It provides a dedicated text area to edit the generated message.
+- Dynamic Newlines: Use the down arrow key on the last line to seamlessly add new lines to your commit message, and the up arrow key to remove them.
+- Quick Undo: Press `ctrl+z` to instantly undo the last local commit if you need to make changes.
+- Direct Syncing: Commit your changes and immediately push them to your remote repository with a second press of the commit button.
+- Customizable Prompts: The instructions provided to the language model are stored in `comet/system.md` and can be edited to fit your specific workflow.
+
+## Requirements
+
+- Python 3.10 or higher
+- Git installed and accessible in your system path
+- Ollama installed and running locally
+
+## Installation
+
+Clone the repository and install the required dependencies:
+
+```bash
+git clone <repository_url>
+cd Comet
+python -m venv .venv
+
+# On Windows
+.venv\Scripts\activate
+
+# On Unix/macOS
+source .venv/bin/activate
+
+pip install -r requirements.txt
+```
+
+## Usage
+
+Ensure you have staged your changes using `git add` and that Ollama is running in the background.
+
+Run the Comet application:
+
+```bash
+comet
+```
+
+### Keyboard Shortcuts
+
+- `enter`: Commit the current text. If pressed again, it will push the commit to the remote repository.
+- `tab`: Swap the active language model.
+- `ctrl+r`: Regenerate the commit message with the current model.
+- `ctrl+z`: Undo the most recent local commit.
+- `ctrl+t`: Terminate the application.
+- `down arrow`: Add a new line when at the bottom of the text area.
+- `up arrow`: Remove the previous empty line.
+
+## Architecture
+
+Comet uses the `subprocess` module to run git commands and capture diffs. It reads the local `comet/system.md` file for system instructions and sends the diff to the Ollama Python client. The interface is built using Textual, providing responsive keyboard bindings and a resilient terminal layout.
