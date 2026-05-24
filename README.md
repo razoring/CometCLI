@@ -1,6 +1,6 @@
-# cli-comet
+# Comet CLI
 
-Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models via Ollama or LMStudio. It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
+Comet helps you save tokens! Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models via Ollama or LMStudio. It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
 
 ## Features
 
