@@ -1,4 +1,3 @@
-from textual.widgets._label import Label
 import colorama
 from httpx import __name
 from ollama import chat, ChatResponse, Client
@@ -9,10 +8,10 @@ import os
 def main():
     client = Client()
     models = sorted(client.list().models, key=lambda m:m.size, reverse=False)
-    diff = subprocess.run(["git", "diff", "HEAD", "-U0"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
+    diff = subprocess.run(["git", "diff", "HEAD", "-U5"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     commits = subprocess.run(["git", "log", "-n", "5", "--oneline"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     
-    prompt_content = f"Recent Commits (For Context Only):\n{commits}\n\nDiff to summarize:\n```diff\n{diff}\n```"
+    promptContent = f"Diff to summarize:\n```diff\n{diff}\n```"
     app = CometTUI(commit="Generating...", model=models[0].model, diff=diff, commits=commits)
     result = app.run()
     if result: print(result)
@@ -85,7 +84,7 @@ class CometTUI(App):
         height: auto;
         padding: 1;
         background: $surface;
-        border: round $primary;
+        border: $primary;
     }
 
     #input {
@@ -131,6 +130,13 @@ class CometTUI(App):
         color: white;
         margin-top: 1;
     }
+
+    #logo {
+        width: 100%;
+        text-align: center;
+        color: $primary;
+        margin-bottom: 1;
+    }
     """
 
     BINDINGS = [
@@ -148,6 +154,8 @@ class CometTUI(App):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="main_container"):
+            #ascii logo
+            yield Label(""" ▄▄▄▄  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄▄ ▄▄▄▄▄▄   ┌─┐┬  ┬\n██▀▀▀ ██▀██ ██▀▄▀██ ██▄▄    ██     │  │  │\n▀████ ▀███▀ ██   ██ ██▄▄▄   ██     └─┘┴─┘┴""", id="logo")
             with Horizontal(id="input_row"):
                 yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
                 yield Button(" ₊✦  Regenerate  ", id="regenBtn")
@@ -157,26 +165,26 @@ class CometTUI(App):
             yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]    [white][b]↓/↑[/b][/white] [gray]move lines[/gray]    [white][b]ctrl+t[/b][/white] [gray]terminate[/gray]", id="shortcuts")
 
     def action_regenerate_action(self) -> None:
-        regen_btn = self.query_one("#regenBtn", Button)
-        if not regen_btn.disabled:
-            regen_btn.press()
+        regenBtn = self.query_one("#regenBtn", Button)
+        if not regenBtn.disabled:
+            regenBtn.press()
 
     def action_exit_action(self) -> None:
         self.query_one("#cancelBtn", Button).press()
 
     def action_commit_action(self) -> None:
-        commit_btn = self.query_one("#commitBtn", Button)
-        if not commit_btn.disabled:
-            commit_btn.press()
+        commitBtn = self.query_one("#commitBtn", Button)
+        if not commitBtn.disabled:
+            commitBtn.press()
 
     def action_undo_commit(self) -> None:
-        commit_btn = self.query_one("#commitBtn", Button)
-        if str(commit_btn.label).strip() == "Sync  ➤":
+        commitBtn = self.query_one("#commitBtn", Button)
+        if str(commitBtn.label).strip() == "Sync  ➤":
             subprocess.run(["git", "reset", "HEAD~1"], capture_output=True)
-            commit_btn.label = " ✔   Commit"
+            commitBtn.label = " ✔   Commit"
 
     def on_mount(self) -> None:
-        self.query_one("#input_row").border_title = "Comet CLI"
+        self.query_one("#input_row").border_title = f"{self.model}"
         self.query_one("#regenBtn").disabled = True
         self.regenerate()
 
@@ -189,10 +197,10 @@ class CometTUI(App):
                 self.exit(f"{colorama.Fore.GREEN}Comet committed and synced successfully! {colorama.Style.RESET_ALL}")
                 return
 
-            text_area = self.query_one("#input", TextArea)
-            final_message = text_area.text.strip()
+            textArea = self.query_one("#input", TextArea)
+            finalMessage = textArea.text.strip()
             
-            subprocess.run(["git", "commit", "-a", "-m", final_message], capture_output=True)
+            subprocess.run(["git", "commit", "-a", "-m", finalMessage], capture_output=True)
             event.button.label = "Sync  ➤"
             
         elif event.button.id == "cancelBtn":
@@ -200,23 +208,26 @@ class CometTUI(App):
             
         elif event.button.id == "regenBtn":
             event.button.disabled = True
-            text_area = self.query_one("#input", TextArea)
-            text_area.text = ""
+            textArea = self.query_one("#input", TextArea)
+            textArea.text = ""
             self.regenerate()
 
     @work(thread=True)
     def regenerate(self) -> None:
-        if not hasattr(self, "past_responses"):
-            self.past_responses = set()
+        if not hasattr(self, "pastResponses"):
+            self.pastResponses = set()
             
-        prompt_content = f"Diff to summarize:\n```diff\n{self.diff}\n```\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE):\n{self.commits}"
+        systemPrompt = open("comet\system.md", "r", encoding="utf-8").read()
+        systemPrompt += f"\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE. They are just for tone/style reference):\n{self.commits}"
+        
+        promptContent = f"Diff to summarize:\n```diff\n{self.diff}\n```"
         
         while True:
-            messages = [{"role": "system", "content": open("comet\system.md","r", encoding="utf-8").read()}]
-            messages.append({"role": "user", "content": prompt_content})
+            messages = [{"role": "system", "content": systemPrompt}]
+            messages.append({"role": "user", "content": promptContent})
             
-            for past_response in self.past_responses:
-                messages.append({"role": "assistant", "content": past_response})
+            for pastResponse in self.pastResponses:
+                messages.append({"role": "assistant", "content": pastResponse})
                 messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
                 
             response = chat(model=self.model, messages=messages, options={"temperature": 0.9}, think=False, keep_alive=-1, stream=True)
@@ -225,14 +236,14 @@ class CometTUI(App):
                 message += chunk['message']['content']
                 self.call_from_thread(self.update_textarea, message, False)
             
-            if message not in self.past_responses:
-                self.past_responses.add(message)
+            if message not in self.pastResponses:
+                self.pastResponses.add(message)
                 self.call_from_thread(self.update_textarea, message, True)
                 break
 
     def update_textarea(self, message: str, finished: bool) -> None:
-        text_area = self.query_one("#input", TextArea)
-        text_area.text = message
+        textArea = self.query_one("#input", TextArea)
+        textArea.text = message
         if finished:
             self.query_one("#regenBtn").disabled = False
 
