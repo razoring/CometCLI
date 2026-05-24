@@ -71,11 +71,6 @@ class CustomTextArea(TextArea):
         Binding("escape", "exit_action", "Terminate", priority=True)
     ]
 
-    def on_key(self, event: events.Key) -> None:
-        if event.key == "enter":
-            self.app.action_commit_action()
-            event.prevent_default()
-
     def action_cursor_down(self, select: bool = False) -> None:
         if self.cursor_location[0] == self.document.line_count - 1:
             loc = self.cursor_location
@@ -128,11 +123,18 @@ class CometTUI(App):
         height: auto;
         padding: 1;
         background: $surface;
-        border: $primary;
+        border: solid $panel;
+        border-title-color: $text-muted;
+    }
+
+    #input_row:focus-within {
+        border: solid $primary;
+        border-title-color: $primary;
     }
 
     #input_row.committed {
-        border: $surface;
+        border: solid $panel;
+        border-title-color: $text-muted;
     }
 
     #input {
@@ -183,7 +185,7 @@ class CometTUI(App):
     #shortcuts {
         width: 100%;
         text-align: center;
-        color: white;
+        color: $text-muted;
         margin-top: 1;
     }
 
@@ -199,7 +201,8 @@ class CometTUI(App):
         Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
         Binding("escape", "exit_action", "Quit", priority=True),
         Binding("ctrl+z", "undo_commit", "Undo Commit", priority=True),
-        Binding("tab", "swap_model", "Swap Model", priority=True)
+        Binding("tab", "swap_model", "Swap Model", priority=True),
+        Binding("enter", "commit_action", "Continue", priority=True)
     ]
 
     def __init__(self, commit: str, model: str, diff: str, commits: str, allModels: list[str], provider: str = "ollama", client = None):
@@ -225,7 +228,7 @@ class CometTUI(App):
                 undo.display = False
                 yield undo
                 yield Button(" 🗙   Quit ", id="cancelBtn")
-            yield Label("[white][b]ctrl+r[/b][/white] [gray]regenerate[/gray]    [white][b]enter[/b][/white] [gray]continue[/gray]    [white][b]tab[/b][/white] [gray]swap model[/gray]    [white][b]ctrl+z[/b][/white] [gray]undo[/gray]    [white][b]↓/↑[/b][/white] [gray]move lines[/gray]    [white][b]esc[/b][/white] [gray]quit[/gray]", id="shortcuts")
+            yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
 
     def action_swap_model(self) -> None:
         if self.query_one("#input_row").has_class("committed"):
@@ -253,7 +256,7 @@ class CometTUI(App):
         if not commitBtn.disabled:
             commitBtn.press()
 
-    def undo(self) -> None:
+    def action_undo_commit(self) -> None:
         commitBtn = self.query_one("#commitBtn", Button)
         if str(commitBtn.label).strip() == "Sync  ➤":
             subprocess.run(["git", "reset", "HEAD~1"], capture_output=True)
@@ -273,6 +276,22 @@ class CometTUI(App):
         self.query_one("#input_row").border_title = f"{self.model}"
         self.query_one("#regenBtn").disabled = True
         self.query_one("#commitBtn").disabled = True
+        
+        try:
+            from textual.color import Color
+            v = self.get_css_variables()
+            surface = Color.parse(v.get("surface", "#000000"))
+            text = Color.parse(v.get("text", "#ffffff"))
+            blended = surface.blend(text, 0.6)
+            css = f"""
+            #input_row {{ border: solid {blended.hex}; }}
+            #input_row.committed {{ border: solid {blended.hex}; }}
+            """
+            self.stylesheet.add_source(css)
+            self.stylesheet.update(self)
+        except Exception:
+            pass
+
         self.initialize_llm()
         self.check_for_updates()
 
@@ -363,7 +382,7 @@ class CometTUI(App):
             self.exit(f"{colorama.Fore.RED}User cancelled the operation. {colorama.Style.RESET_ALL}")
 
         elif event.button.id == "undoBtn":
-            self.undo()
+            self.action_undo_commit()
             
         elif event.button.id == "regenBtn":
             event.button.disabled = True
