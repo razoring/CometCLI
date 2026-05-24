@@ -7,6 +7,7 @@ import os
 import json
 import urllib.request
 import urllib.error
+import importlib.metadata
 
 def get_settings_path():
     return os.path.join(os.path.dirname(__file__), "settings.json")
@@ -255,10 +256,30 @@ class CometTUI(App):
             self.query_one("#cancelBtn").display = True
 
     def on_mount(self) -> None:
+        if self.provider == "auto" or self.model == "Loading...":
+            self.notify("Welcome! This is the longest it'll take to load. :D", title="Scanning Providers", severity="information", timeout=3.0)
         self.query_one("#input_row").border_title = f"{self.model}"
         self.query_one("#regenBtn").disabled = True
         self.query_one("#commitBtn").disabled = True
         self.initialize_llm()
+        self.check_for_updates()
+
+    @work(thread=True)
+    def check_for_updates(self) -> None:
+        try:
+            current_version = importlib.metadata.version("cli-comet")
+            req = urllib.request.Request("https://pypi.org/pypi/cli-comet/json")
+            with urllib.request.urlopen(req, timeout=2.0) as response:
+                data = json.loads(response.read().decode())
+                latest_version = data["info"]["version"]
+                
+                curr_tuple = tuple(map(int, current_version.split(".")))
+                latest_tuple = tuple(map(int, latest_version.split(".")))
+                
+                if latest_tuple > curr_tuple:
+                    self.call_from_thread(self.notify, f"Update available: v{latest_version}! Run `pipx upgrade cli-comet` to install.", title="Update Available", severity="warning", timeout=15.0)
+        except Exception:
+            pass
 
     @work(thread=True)
     def initialize_llm(self) -> None:
