@@ -1,0 +1,2 @@
+[console_scripts]
+comet = comet.cli:main

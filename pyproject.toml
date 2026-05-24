@@ -1,0 +1,6 @@
+[project]
+name = "comet"
+version = "0.1.0"
+
+[project.scripts]
+comet = "comet.cli:main"
