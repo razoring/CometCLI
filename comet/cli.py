@@ -229,6 +229,9 @@ class CometTUI(App):
         self.allModels = allModels
         self.provider = provider
         self.client = client
+        self.is_generating = False
+        self.needs_poll = True
+        self._ollama_expires_at = {}
 
     def compose(self) -> ComposeResult:
         with Vertical(id="main_container"):
@@ -419,6 +422,8 @@ class CometTUI(App):
 
     @work(thread=True)
     def regenerate(self) -> None:
+        self.is_generating = True
+        self.needs_poll = True
         if not hasattr(self, "pastResponses"):
             self.pastResponses = set()
             
@@ -491,36 +496,53 @@ class CometTUI(App):
         textArea.text = message
         if finished:
             self.query_one("#regenBtn").disabled = False
+            self.is_generating = False
 
     @work(thread=True)
     def update_status_loop(self) -> None:
+        from datetime import datetime
         if getattr(self, "model", "Loading...") == "Loading...":
             self.call_from_thread(self.update_border_title, "Loading...")
             return
 
+        if self.provider != "ollama":
+            self.call_from_thread(self.update_border_title, f"{self.model}")
+            return
+
         status = ""
-        if self.provider == "ollama":
-            try:
-                import ollama
-                from datetime import datetime
-                ps = ollama.ps()
-                models = getattr(ps, 'models', []) if hasattr(ps, 'models') else ps.get('models', [])
-                for m in models:
-                    model_name = getattr(m, 'model', m.get('model', '')) if hasattr(m, 'model') else m.get('model', '')
-                    if model_name == self.model or getattr(m, 'name', '') == self.model:
-                        expires_at = getattr(m, 'expires_at', None) if hasattr(m, 'expires_at') else m.get('expires_at')
-                        if expires_at:
-                            now = datetime.now(expires_at.tzinfo) if expires_at.tzinfo else datetime.now()
-                            diff = expires_at - now
-                            secs = diff.total_seconds()
-                            if secs > 0:
-                                mins = int(secs // 60)
-                                status = f"TTL: {mins}m" if mins > 0 else "TTL: <1m"
-                        break
-                if not status:
-                    status = "Loading..."
-            except Exception:
-                pass
+        
+        if self.is_generating:
+            status = "Loading..."
+            self.needs_poll = True
+        else:
+            if getattr(self, "needs_poll", False):
+                try:
+                    import ollama
+                    ps = ollama.ps()
+                    models = getattr(ps, 'models', []) if hasattr(ps, 'models') else ps.get('models', [])
+                    self._ollama_expires_at.clear()
+                    for m in models:
+                        m_name = getattr(m, 'model', m.get('model', '')) if hasattr(m, 'model') else m.get('model', '')
+                        m_expires = getattr(m, 'expires_at', None) if hasattr(m, 'expires_at') else m.get('expires_at')
+                        self._ollama_expires_at[m_name] = m_expires
+                        if getattr(m, 'name', ''):
+                            self._ollama_expires_at[getattr(m, 'name', '')] = m_expires
+                    self.needs_poll = False
+                except Exception:
+                    pass
+
+            expires_at = self._ollama_expires_at.get(self.model)
+            if expires_at:
+                now = datetime.now(expires_at.tzinfo) if expires_at.tzinfo else datetime.now()
+                diff = expires_at - now
+                secs = diff.total_seconds()
+                if secs > 0:
+                    mins = int(secs // 60)
+                    status = f"TTL: {mins}m" if mins > 0 else "TTL: <1m"
+                else:
+                    self.needs_poll = True
+            else:
+                status = ""
 
         if status:
             self.call_from_thread(self.update_border_title, f"{self.model} ㆍ {status}")
