@@ -42,8 +42,14 @@ def load_settings():
 def save_settings(provider, model):
     path = get_settings_path()
     try:
+        settings = load_settings()
+        settings["provider"] = provider
+        settings["model"] = model
+        if "openrouter_api_key" not in settings:
+            settings["openrouter_api_key"] = ""
+            
         with open(path, "w", encoding="utf-8") as f:
-            json.dump({"provider": provider, "model": model}, f)
+            json.dump(settings, f, indent=4)
     except Exception:
         pass
 
@@ -56,7 +62,7 @@ def check_endpoint(url):
 
 def main():
     parser = argparse.ArgumentParser(description="Comet - AI commit message generator")
-    parser.add_argument("--provider", choices=["auto", "ollama", "lmstudio"], default="auto", help="Choose AI provider")
+    parser.add_argument("--provider", choices=["auto", "ollama", "lmstudio", "openrouter"], default="auto", help="Choose AI provider")
     args = parser.parse_args()
 
     provider = args.provider
@@ -423,6 +429,17 @@ class CometTUI(App):
             except Exception:
                 self.allModels = ["unknown"]
                 defaultModel = "unknown"
+        elif self.provider == "openrouter":
+            settings = load_settings()
+            api_key = os.getenv("OPENROUTER_API_KEY") or settings.get("openrouter_api_key", "")
+            self.client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key or "missing_key")
+            try:
+                modelsData = self.client.models.list().data
+                self.allModels = [m.id for m in modelsData]
+                defaultModel = "openai/gpt-4o-mini" if "openai/gpt-4o-mini" in self.allModels else (self.allModels[0] if self.allModels else "unknown")
+            except Exception:
+                self.allModels = ["unknown"]
+                defaultModel = "unknown"
 
         if getattr(self, "model", "") in self.allModels and self.model != "Loading...":
             pass
@@ -518,7 +535,7 @@ class CometTUI(App):
                     buffer += chunk['message']['content']
                     self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
                 message = extract_json_message(buffer)
-            elif self.provider == "lmstudio":
+            elif self.provider in ["lmstudio", "openrouter"]:
                 try:
                     response = self.client.chat.completions.create(
                         model=self.model, 
