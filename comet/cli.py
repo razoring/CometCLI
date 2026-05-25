@@ -220,13 +220,31 @@ class CometTUI(App):
         margin-top: 1;
     }
 
-    #cwd_label {
-        dock: bottom;
+    #bottom_row {
         width: 100%;
         height: 1;
-        text-align: left;
+        margin-top: 1;
+    }
+
+    #cwd_label {
+        width: 1fr;
+        height: 1;
         color: $text-muted;
+        padding-left: 1;
+        overflow: hidden;
+    }
+
+    #settingsBtn {
+        width: auto;
+        height: 1;
+        border: none;
         background: transparent;
+        color: $text-muted;
+        margin-right: 1;
+    }
+
+    #settingsBtn:hover {
+        color: $text;
     }
 
     #logo {
@@ -273,7 +291,15 @@ class CometTUI(App):
                 yield undo
                 yield Button(" ⛌   Quit ", id="cancelBtn")
             yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
-            yield Label(f"  {os.getcwd().replace(os.sep, '/')}/", id="cwd_label")
+            
+            home = os.path.expanduser("~")
+            cwd_raw = os.getcwd()
+            cwd_path = "~" + cwd_raw[len(home):] if cwd_raw.startswith(home) else cwd_raw
+            cwd_path = cwd_path.replace(os.sep, "/") + "/"
+            
+            with Horizontal(id="bottom_row"):
+                yield Label(f" {cwd_path}", id="cwd_label")
+                yield Button(" ⚙ Settings ", id="settingsBtn")
 
     def action_swap_model(self) -> None:
         if self.query_one("#input_row").has_class("committed"):
