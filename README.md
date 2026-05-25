@@ -1,5 +1,6 @@
 # Comet CLI
-![Image](/marketing/image.png)
+![Image](/marketing/home.png)
+![Image](/marketing/sync.png)
 
 Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models (Ollama, LMStudio) or the cloud (OpenRouter). It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
 
