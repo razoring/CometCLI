@@ -11,6 +11,7 @@ Comet is a terminal user interface application that automatically generates desc
 ## Features
 
 - **Instant Boot**: The UI renders instantly with zero latency, utilizing background threading for network auto-detection and initialization.
+- **Headless Automation**: Run `comet --auto` (or `-a`) to skip the UI entirely and automatically generate, commit, and push in one command.
 - **Terminal User Interface**: Built with Textual. It provides a dedicated text area to edit the generated message.
 - **Git Integration**: Commit your changes and immediately push them to your remote repository with a second press of the commit button.
 - **Model Auto-Selection**: Automatically detects the smallest model that can run on your system to minimize token usage and response latency.
@@ -66,6 +67,13 @@ Run the Comet application:
 
 ```bash
 comet
+```
+
+To bypass the UI and automatically generate, commit, and push your changes in one step:
+```bash
+comet --auto
+# or 
+comet -a
 ```
 
 ### Keyboard Shortcuts
