@@ -1,30 +1,40 @@
 # Comet CLI
 
-Comet helps you save tokens! Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models via Ollama or LMStudio. It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
+Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models (Ollama, LMStudio) or the cloud (OpenRouter). It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
+
+> AI commit messages are silently burning through your API limits.
+>
+> An unoptimized `git diff` can easily consume **15,000+ tokens** per request. If an average developer makes **3 commits per hour**, a standard 4-hour coding session would blast through over **180,000 tokens**!
+>
+> Comet uses only **500 tokens**! Saving you roughly **174,000 tokens** of unnecessary API costs in the same 4 hours!
 
 ## Features
 
 - **Instant Boot**: The UI renders instantly with zero latency, utilizing background threading for network auto-detection and initialization.
-- **Provider Auto-Detection**: Automatically detects whether you are running Ollama or LMStudio locally without requiring configuration, while allowing overrides via the `--provider` flag.
-- **Persistent Settings**: Comet remembers your last successfully used provider and model in a `settings.json` file inside the installation directory, skipping auto-detection on future boot-ups.
-- **Local Model Generation**: Connects to your local AI servers to generate commit messages entirely privately.
-- **Model Swapping**: Press `tab` to cycle through available local models directly from the interface. 
-- **Context Aware**: Automatically pulls in the last 5 commits to understand the tone and style of your project.
 - **Terminal User Interface**: Built with Textual. It provides a dedicated text area to edit the generated message.
-- **Dynamic Newlines**: Use the down arrow key on the last line to seamlessly add new lines to your commit message, and the up arrow key to remove them.
-- **Quick Undo**: Press `ctrl+z` to instantly undo the last local commit if you need to make changes.
-- **Direct Syncing**: Commit your changes and immediately push them to your remote repository with a second press of the commit button.
-- **Customizable Prompts**: The instructions provided to the language model are stored in `comet/system.md` and can be edited to fit your specific workflow.
+- **Git Integration**: Commit your changes and immediately push them to your remote repository with a second press of the commit button.
+- **Model Auto-Selection**: Automatically detects the smallest model that can run on your system to minimize token usage and response latency.
+- **Hotswap Models**: Press `tab` to quickly cycle through available models directly from the interface. 
+- **Local & Cloud Generation**: Connects to your local AI servers or the OpenRouter API to generate commit messages.
+- **Context Aware**: Automatically pulls in the last 5 commits to understand your codebase.
+- **Token Optimization**: Actively strips massive metadata from the diff payload, drastically reducing API costs and Time-To-First-Token.
+
 
 ## Requirements
 
 - Python 3.10 or higher
 - Git installed and accessible in your system path
-- Ollama or LMStudio installed and running locally
+- Ollama or LMStudio running locally, or an OpenRouter API key
 
 ## Installation
 
-The recommended way to install Comet is globally using `pipx`:
+You can install Comet using standard `pip`:
+
+```bash
+pip install cli-comet
+```
+
+However, the **recommended** way to install Comet is globally using `pipx` to avoid dependency conflicts with other python packages:
 
 ```bash
 pipx install cli-comet
@@ -56,12 +66,6 @@ Run the Comet application:
 
 ```bash
 comet
-```
-
-You can optionally force a specific provider:
-```bash
-comet --provider ollama
-comet --provider lmstudio
 ```
 
 ### Keyboard Shortcuts

@@ -60,19 +60,136 @@ def check_endpoint(url):
     except (urllib.error.URLError, ValueError):
         return False
 
+def headless_auto_commit(provider, model, diff, file_status, commits):
+    print(f"{colorama.Fore.CYAN}Generating auto-commit with {provider}...{colorama.Style.RESET_ALL}")
+    
+    client = None
+    if provider == "auto":
+        lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
+        ollamaUp = check_endpoint("http://localhost:11434/api/tags")
+        if lmstudioUp and not ollamaUp:
+            provider = "lmstudio"
+        else:
+            provider = "ollama"
+
+    if provider == "ollama":
+        client = OllamaClient()
+        try:
+            allModelsData = sorted(client.list().models, key=lambda m:m.size, reverse=False)
+            allModels = [m.model for m in allModelsData]
+            loadedModels = client.ps().models
+            defaultModel = loadedModels[0].model if loadedModels else (allModels[0] if allModels else "unknown")
+        except Exception:
+            allModels = ["unknown"]
+            defaultModel = "unknown"
+    elif provider == "lmstudio":
+        client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+        try:
+            modelsData = client.models.list().data
+            allModels = [m.id for m in modelsData]
+            defaultModel = allModels[0] if allModels else "unknown"
+        except Exception:
+            allModels = ["unknown"]
+            defaultModel = "unknown"
+    elif provider == "openrouter":
+        settings = load_settings()
+        api_key = os.getenv("OPENROUTER_API_KEY") or settings.get("openrouter_api_key", "")
+        client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key or "missing_key")
+        try:
+            modelsData = client.models.list().data
+            allModels = [m.id for m in modelsData]
+            defaultModel = "openai/gpt-4o-mini" if "openai/gpt-4o-mini" in allModels else (allModels[0] if allModels else "unknown")
+        except Exception:
+            allModels = ["unknown"]
+            defaultModel = "unknown"
+    else:
+        allModels = []
+        defaultModel = "unknown"
+
+    if model not in allModels or model == "":
+        model = defaultModel
+        
+    save_settings(provider, model)
+    print(f"{colorama.Fore.YELLOW}Model active: {model}{colorama.Style.RESET_ALL}")
+    
+    systemPath = os.path.join(os.path.dirname(__file__), "system.md")
+    systemPrompt = open(systemPath, "r", encoding="utf-8").read()
+    systemPrompt += f"\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE. They are just for tone/style reference):\n{commits}"
+    
+    promptContent = f"Files changed:\n{file_status}\n\nDiff to summarize (may exclude minified/auto-generated files):\n```diff\n{diff}\n```"
+    messages = [{"role": "system", "content": systemPrompt}, {"role": "user", "content": promptContent}]
+    
+    buffer = ""
+    try:
+        if provider == "ollama":
+            response = ollama_chat(
+                model=model, 
+                messages=messages, 
+                options={"temperature": 0.9, "seed": random.randint(0, 1000000)}, 
+                think=False, 
+                stream=True,
+                format=CommitResponse.model_json_schema()
+            )
+            for chunk in response:
+                buffer += chunk['message']['content']
+        elif provider in ["lmstudio", "openrouter"]:
+            try:
+                response = client.chat.completions.create(
+                    model=model, 
+                    messages=messages, 
+                    temperature=0.9, 
+                    stream=True,
+                    response_format={
+                        "type": "json_schema", 
+                        "json_schema": {"name": "CommitResponse", "schema": CommitResponse.model_json_schema(), "strict": True}
+                    }
+                )
+            except Exception:
+                messages[0]["content"] += "\nRespond with JSON: {\"commit_message\": \"...\"}"
+                response = client.chat.completions.create(
+                    model=model, 
+                    messages=messages, 
+                    temperature=0.9, 
+                    stream=True,
+                    response_format={"type": "json_object"}
+                )
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    buffer += chunk.choices[0].delta.content
+    except Exception as e:
+        print(f"{colorama.Fore.RED}API Error: {e}{colorama.Style.RESET_ALL}")
+        return
+
+    message = extract_json_message(buffer)
+    if not message:
+        print(f"{colorama.Fore.RED}Failed to generate a valid commit message. Output was: {buffer}{colorama.Style.RESET_ALL}")
+        return
+        
+    print(f"\n{colorama.Fore.GREEN}Generated Message:{colorama.Style.RESET_ALL}\n{message}\n")
+    
+    print(f"{colorama.Fore.CYAN}Committing...{colorama.Style.RESET_ALL}")
+    commit_res = subprocess.run(["git", "commit", "-a", "-m", message], capture_output=True, text=True)
+    if commit_res.returncode != 0:
+        print(f"{colorama.Fore.RED}Commit failed:\n{commit_res.stderr}{colorama.Style.RESET_ALL}")
+        return
+        
+    print(f"{colorama.Fore.CYAN}Pushing to remote...{colorama.Style.RESET_ALL}")
+    push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
+    if push_res.returncode != 0:
+        print(f"{colorama.Fore.RED}Push failed:\n{push_res.stderr}{colorama.Style.RESET_ALL}")
+        return
+        
+    print(f"{colorama.Fore.GREEN}Comet committed and synced successfully!{colorama.Style.RESET_ALL}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Comet - AI commit message generator")
-    parser.add_argument("--provider", choices=["auto", "ollama", "lmstudio", "openrouter"], default="auto", help="Choose AI provider")
+    parser.add_argument("-a", "--auto", action="store_true", help="Skip the UI and automatically commit and sync")
     args = parser.parse_args()
 
-    provider = args.provider
-    model = ""
-    if provider == "auto":
-        settings = load_settings()
-        if "provider" in settings:
-            provider = settings["provider"]
-        if "model" in settings:
-            model = settings["model"]
+    settings = load_settings()
+    provider = settings.get("provider", "auto")
+    model = settings.get("model", "")
 
     diff_args = [
         "git", "diff", "HEAD", "-U5", "--", ".",
@@ -91,9 +208,12 @@ def main():
     status = subprocess.run(["git", "diff", "--name-status", "HEAD"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     commits = subprocess.run(["git", "log", "-n", "5", "--oneline"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     
-    app = CometTUI(commit="Generating...", model=model, diff=diff, file_status=status, commits=commits, allModels=[], provider=provider, client=None)
-    result = app.run()
-    if result: print(result)
+    if args.auto:
+        headless_auto_commit(provider, model, diff, status, commits)
+    else:
+        app = CometTUI(commit="Generating...", model=model, diff=diff, file_status=status, commits=commits, allModels=[], provider=provider, client=None)
+        result = app.run()
+        if result: print(result)
 
 from textual.app import App, ComposeResult
 from textual.widgets import TextArea, Button, Label
