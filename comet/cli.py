@@ -148,6 +148,7 @@ class CometTUI(App):
         height: 100%;
         padding: 1 2;
         background: $surface;
+        layers: under default;
     }
 
     #input_row {
@@ -221,6 +222,8 @@ class CometTUI(App):
     }
 
     #bottom_row {
+        dock: bottom;
+        layer: under;
         width: 100%;
         height: 1;
         margin-top: 1;
@@ -279,6 +282,11 @@ class CometTUI(App):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="main_container"):
+            path = "~" + os.getcwd()[len(os.path.expanduser("~")):] if os.getcwd().startswith(os.path.expanduser("~")) else os.getcwd().replace(os.sep, "/") + "/"
+            with Horizontal(id="bottom_row"):
+                yield Label(f" {path}", id="cwd_label")
+                yield Button(" ⚙ Settings ", id="settingsBtn")
+
             #ascii logo
             yield Label(""" ▄▄▄▄  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄▄ ▄▄▄▄▄▄   ┌─┐┬  ┬\n██▀▀▀ ██▀██ ██▀▄▀██ ██▄▄    ██     │  │  │\n▀████ ▀███▀ ██   ██ ██▄▄▄   ██     └─┘┴─┘┴""", id="logo")
             with Horizontal(id="input_row"):
@@ -291,11 +299,6 @@ class CometTUI(App):
                 yield undo
                 yield Button(" ⛌   Quit ", id="cancelBtn")
             yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
-            
-            path = "~" + os.getcwd()[len(os.path.expanduser("~")):] if os.getcwd().startswith(os.path.expanduser("~")) else os.getcwd().replace(os.sep, "/") + "/"
-            with Horizontal(id="bottom_row"):
-                yield Label(f" {path}", id="cwd_label")
-                yield Button(" ⚙ Settings ", id="settingsBtn")
 
     def action_swap_model(self) -> None:
         if self.query_one("#input_row").has_class("committed"):
