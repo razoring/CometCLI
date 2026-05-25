@@ -9,6 +9,7 @@ import urllib.request
 import urllib.error
 import importlib.metadata
 import re
+import random
 from pydantic import BaseModel, Field
 
 class CommitResponse(BaseModel):
@@ -439,7 +440,7 @@ class CometTUI(App):
                 response = ollama_chat(
                     model=self.model, 
                     messages=messages, 
-                    options={"temperature": 0.9}, 
+                    options={"temperature": 0.9, "seed": random.randint(0, 1000000)}, 
                     think=False, 
                     keep_alive="60m", 
                     stream=True,
