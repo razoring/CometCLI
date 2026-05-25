@@ -292,13 +292,9 @@ class CometTUI(App):
                 yield Button(" ⛌   Quit ", id="cancelBtn")
             yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
             
-            home = os.path.expanduser("~")
-            cwd_raw = os.getcwd()
-            cwd_path = "~" + cwd_raw[len(home):] if cwd_raw.startswith(home) else cwd_raw
-            cwd_path = cwd_path.replace(os.sep, "/") + "/"
-            
+            path = "~" + os.getcwd()[len(os.path.expanduser("~")):] if os.getcwd().startswith(os.path.expanduser("~")) else os.getcwd().replace(os.sep, "/") + "/"
             with Horizontal(id="bottom_row"):
-                yield Label(f" {cwd_path}", id="cwd_label")
+                yield Label(f" {path}", id="cwd_label")
                 yield Button(" ⚙ Settings ", id="settingsBtn")
 
     def action_swap_model(self) -> None:
