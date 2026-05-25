@@ -8,6 +8,20 @@ import json
 import urllib.request
 import urllib.error
 import importlib.metadata
+import re
+from pydantic import BaseModel, Field
+
+class CommitResponse(BaseModel):
+    commit_message: str = Field(..., max_length=150, description="The concise commit message. DO NOT output diffs. STRICTLY limit to 150 characters.")
+
+def extract_json_message(buffer: str) -> str:
+    match = re.search(r'"commit_message"\s*:\s*"(.*)', buffer, re.DOTALL)
+    if match:
+        text = match.group(1)
+        text = text.rstrip(" \n\r\t}")
+        if text.endswith('"'): text = text[:-1]
+        return text.replace('\\n', '\n').replace('\\"', '"')
+    return buffer
 
 def get_settings_path():
     return os.path.join(os.path.dirname(__file__), "settings.json")
@@ -276,6 +290,7 @@ class CometTUI(App):
         self.query_one("#input_row").border_title = f"{self.model}"
         self.query_one("#regenBtn").disabled = True
         self.query_one("#commitBtn").disabled = True
+        self.set_interval(2.0, self.update_status_loop)
         
         try:
             from textual.color import Color
@@ -421,18 +436,49 @@ class CometTUI(App):
                 messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
                 
             if self.provider == "ollama":
-                response = ollama_chat(model=self.model, messages=messages, options={"temperature": 0.9}, think=False, keep_alive="60m", stream=True)
-                message = ""
+                response = ollama_chat(
+                    model=self.model, 
+                    messages=messages, 
+                    options={"temperature": 0.9}, 
+                    think=False, 
+                    keep_alive="60m", 
+                    stream=True,
+                    format=CommitResponse.model_json_schema()
+                )
+                buffer = ""
                 for chunk in response:
-                    message += chunk['message']['content']
-                    self.call_from_thread(self.update_textarea, message, False)
+                    buffer += chunk['message']['content']
+                    self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                message = extract_json_message(buffer)
             elif self.provider == "lmstudio":
-                response = self.client.chat.completions.create(model=self.model, messages=messages, temperature=0.9, stream=True)
-                message = ""
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self.model, 
+                        messages=messages, 
+                        temperature=0.9, 
+                        stream=True,
+                        response_format={
+                            "type": "json_schema", 
+                            "json_schema": {"name": "CommitResponse", "schema": CommitResponse.model_json_schema(), "strict": True}
+                        }
+                    )
+                except Exception:
+                    # Fallback to json_object if json_schema is not supported by LMStudio version
+                    messages[0]["content"] += "\nRespond with JSON: {\"commit_message\": \"...\"}"
+                    response = self.client.chat.completions.create(
+                        model=self.model, 
+                        messages=messages, 
+                        temperature=0.9, 
+                        stream=True,
+                        response_format={"type": "json_object"}
+                    )
+                
+                buffer = ""
                 for chunk in response:
                     if chunk.choices[0].delta.content is not None:
-                        message += chunk.choices[0].delta.content
-                        self.call_from_thread(self.update_textarea, message, False)
+                        buffer += chunk.choices[0].delta.content
+                        self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                message = extract_json_message(buffer)
             
             if message not in self.pastResponses:
                 self.pastResponses.add(message)
@@ -444,5 +490,46 @@ class CometTUI(App):
         textArea.text = message
         if finished:
             self.query_one("#regenBtn").disabled = False
+
+    @work(thread=True)
+    def update_status_loop(self) -> None:
+        if getattr(self, "model", "Loading...") == "Loading...":
+            self.call_from_thread(self.update_border_title, "Loading...")
+            return
+
+        status = ""
+        if self.provider == "ollama":
+            try:
+                import ollama
+                from datetime import datetime
+                ps = ollama.ps()
+                models = getattr(ps, 'models', []) if hasattr(ps, 'models') else ps.get('models', [])
+                for m in models:
+                    model_name = getattr(m, 'model', m.get('model', '')) if hasattr(m, 'model') else m.get('model', '')
+                    if model_name == self.model or getattr(m, 'name', '') == self.model:
+                        expires_at = getattr(m, 'expires_at', None) if hasattr(m, 'expires_at') else m.get('expires_at')
+                        if expires_at:
+                            now = datetime.now(expires_at.tzinfo) if expires_at.tzinfo else datetime.now()
+                            diff = expires_at - now
+                            secs = diff.total_seconds()
+                            if secs > 0:
+                                mins = int(secs // 60)
+                                status = f"TTL: {mins}m" if mins > 0 else "TTL: <1m"
+                        break
+                if not status:
+                    status = "Loading..."
+            except Exception:
+                pass
+
+        if status:
+            self.call_from_thread(self.update_border_title, f"{self.model} ㆍ {status}")
+        else:
+            self.call_from_thread(self.update_border_title, f"{self.model}")
+
+    def update_border_title(self, title: str) -> None:
+        try:
+            self.query_one("#input_row").border_title = title
+        except Exception:
+            pass
 
 if __name__ == "__main__": main()
