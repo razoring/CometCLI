@@ -41,6 +41,7 @@ You MUST adhere to the following rules or your output will break the system:
 2. DO NOT use any markdown formatting whatsoever (no bold `**`, no italics, no code blocks ` ``` `).
 3. DO NOT start the line with a bullet point, dash (`-`), or asterisk (`*`).
 4. DO NOT add any introductory or concluding text (e.g. no "Here is the commit message:").
+5. ABSOLUTELY NO NEWLINES or carriage returns. The entire description must be a single, continuous sentence. Do not add paragraphs or bullet points.
 
 The ONLY output you provide should be the raw, plain-text string matching this exact pattern:
 type: description
