@@ -11,6 +11,7 @@ Comet is a terminal user interface application that automatically generates desc
 ## Features
 
 - **Instant Boot**: The UI renders instantly with zero latency, utilizing background threading for network auto-detection and initialization.
+- **Disposable TUI**: The interface runs as an alternate terminal screen. When you exit, your previous command history, compiler errors, and statements are completely preserved exactly as they were.
 - **Headless Automation**: Run `comet --auto` (or `-a`) to skip the UI entirely and automatically generate, commit, and push in one command.
 - **Terminal User Interface**: Built with Textual. It provides a dedicated text area to edit the generated message.
 - **Git Integration**: Commit your changes and immediately push them to your remote repository with a second press of the commit button.

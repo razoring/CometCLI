@@ -411,7 +411,7 @@ class CometTUI(App):
             path = "~" + os.getcwd()[len(os.path.expanduser("~")):] if os.getcwd().startswith(os.path.expanduser("~")) else os.getcwd().replace(os.sep, "/") + "/"
             with Horizontal(id="bottom_row"):
                 yield Label(f" {path}", id="cwd_label")
-                yield Button(" ⚙ Settings ", id="settingsBtn")
+                yield Button(" ⚙  Settings ", id="settingsBtn")
 
             #ascii logo
             yield Label(""" ▄▄▄▄  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄▄ ▄▄▄▄▄▄   ┌─┐┬  ┬\n██▀▀▀ ██▀██ ██▀▄▀██ ██▄▄    ██     │  │  │\n▀████ ▀███▀ ██   ██ ██▄▄▄   ██     └─┘┴─┘┴""", id="logo")
@@ -419,11 +419,11 @@ class CometTUI(App):
                 yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
                 yield Button(" ₊✦  Regenerate  ", id="regenBtn")
             with Horizontal(id="action_row"):
-                undo = Button(" ↺   Undo ", id="undoBtn")
-                yield Button(" ✔   Commit ", id="commitBtn")
+                undo = Button(" ↺  Undo ", id="undoBtn")
+                yield Button(" ✔  Commit ", id="commitBtn")
                 undo.display = False
                 yield undo
-                yield Button(" ⛌   Quit ", id="cancelBtn")
+                yield Button(" ⛌  Quit ", id="cancelBtn")
             yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
 
     def action_swap_model(self) -> None:
