@@ -32,8 +32,8 @@ Read the diff carefully and choose exactly ONE of the following standard convent
 - `chore`: Use this for mundane tasks like modifying `.gitignore`, formatting configs, or chore-like maintenance.
 
 ### STEP 2: Write the Description
-Analyze the diff to understand what was actually changed and how it affects the functionality of the code. Do not just list what lines were added or removed. Instead, explain the concrete changes, the specific mechanism or component modified, and its exact functional impact on the codebase.
-Use the imperative, present tense mood. Be highly specific and detailed about the functional changes, but keep it concise and strictly formatted on one single line. Do not write broad or generic summaries. Keep it abstract and functional rather than a literal line-by-line translation, but ensure it accurately reflects the specific code adjustments.
+Analyze the diff to understand what was actually changed. If the changes are functional (e.g. code modifications), explain the concrete mechanism modified and its exact functional impact on the codebase. If the changes are non-functional (e.g. documentation, markdown, chores), simply describe the literal changes concisely. NEVER respond that there are "no changes" if a file was modified.
+Use the imperative, present tense mood. Be specific and detailed, but keep it concise and strictly formatted on one single line. Do not write broad or generic summaries.
 
 ### CRITICAL OUTPUT FORMAT RULES
 You MUST adhere to the following rules or your output will break the system. Smaller LLMs must be extremely careful to follow these rules without exception:

@@ -320,6 +320,11 @@ def main():
         ":(exclude)*.svg"
     ]
     diff = subprocess.run(diff_args, cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
+    
+    if not diff.strip():
+        print(f"{colorama.Fore.YELLOW}No changes detected. Exiting.{colorama.Style.RESET_ALL}")
+        return
+        
     status = subprocess.run(["git", "diff", "--name-status", "HEAD"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     commits = subprocess.run(["git", "log", "-n", "5", "--oneline"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     
