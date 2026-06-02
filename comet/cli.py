@@ -190,7 +190,7 @@ def headless_auto_commit(provider, model, diff, file_status, commits):
     print(f"\n{colorama.Fore.GREEN}Generated Message:{colorama.Style.RESET_ALL}\n{message}\n")
     
     print(f"{colorama.Fore.CYAN}Committing...{colorama.Style.RESET_ALL}")
-    commit_res = subprocess.run(["git", "commit", "-a", "-m", message], capture_output=True, text=True)
+    commit_res = subprocess.run(["git", "commit", "-m", message], capture_output=True, text=True)
     if commit_res.returncode != 0:
         print(f"{colorama.Fore.RED}Commit failed:\n{commit_res.stderr}{colorama.Style.RESET_ALL}")
         return
@@ -303,6 +303,8 @@ def main():
     settings = load_settings()
     provider = settings.get("provider", "auto")
     model = settings.get("model", "")
+
+    subprocess.run(["git", "add", "."], cwd=os.getcwd(), capture_output=True)
 
     diff_args = [
         "git", "diff", "HEAD", "-U5", "--", ".",
@@ -705,7 +707,7 @@ class CometTUI(App):
             textArea = self.query_one("#input", TextArea)
             finalMessage = textArea.text.strip()
             
-            subprocess.run(["git", "commit", "-a", "-m", finalMessage], capture_output=True)
+            subprocess.run(["git", "commit", "-m", finalMessage], capture_output=True)
             event.button.label = "Sync  ➤"
             self.query_one("#undoBtn").display = True
             self.query_one("#cancelBtn").display = False
