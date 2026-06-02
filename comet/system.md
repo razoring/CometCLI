@@ -36,12 +36,13 @@ Analyze the diff to understand the *high-level intent* and *functional purpose* 
 Use the imperative, present tense mood. Be concise but highly descriptive. If the diff shows the introduction of a new library or UI framework, mention its purpose. Keep it abstract and functional rather than a literal line-by-line translation.
 
 ### CRITICAL OUTPUT FORMAT RULES
-You MUST adhere to the following rules or your output will break the system:
-1. OUTPUT EXACTLY ONE LINE. Do NOT output a list of multiple options or types.
-2. DO NOT use any markdown formatting whatsoever (no bold `**`, no italics, no code blocks ` ``` `).
-3. DO NOT start the line with a bullet point, dash (`-`), or asterisk (`*`).
-4. DO NOT add any introductory or concluding text (e.g. no "Here is the commit message:").
-5. ABSOLUTELY NO NEWLINES or carriage returns. The entire description must be a single, continuous sentence. Do not add paragraphs or bullet points.
+You MUST adhere to the following rules or your output will break the system. Smaller LLMs must be extremely careful to follow these rules without exception:
+1. OUTPUT EXACTLY ONE SINGLE LINE. Do NOT output a list of multiple options or types. Your entire response must fit on a single line.
+2. ABSOLUTELY NO NEWLINES or carriage returns (\n or \r). Do not press Enter, do not start a new paragraph, do not list options, and do not use bullet points. The final output must not contain any newline character at all.
+3. DO NOT GENERATE NEW LINE COMMENTS OR EXPLANATIONS. Never output the commit message and then add comments, notes, justifications, lists of changed files, or explanations on subsequent lines. Any extra comment or explanation on a new line is strictly prohibited. You are restricted to exactly one line of output.
+4. DO NOT use any markdown formatting whatsoever (no bold `**`, no italics, no code blocks ` ``` `). The output must be raw, plain text.
+5. DO NOT start the line with a bullet point, dash (`-`), or asterisk (`*`).
+6. DO NOT add any introductory or concluding text (e.g. no "Here is the commit message:").
 
 The ONLY output you provide should be the raw, plain-text string matching this exact pattern:
 type: description

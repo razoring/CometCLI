@@ -29,9 +29,16 @@ def extract_json_message(buffer: str) -> str:
         text = match.group(1)
         text = text.rstrip(" \n\r\t}")
         if text.endswith('"'): text = text[:-1]
-        return text.replace('\\n', '\n').replace('\\"', '"')
+        text = text.replace('\\n', '\n').replace('\\"', '"')
+        if '\n' in text:
+            #discard everything after newline
+            text = text.split('\n')[0]
+        return text
 
     if buffer.lstrip().startswith("{"): return ""
+    if '\n' in buffer:
+        #discard everything after newline
+        buffer = buffer.split('\n')[0]
     return buffer
 
 def get_settings_path():
@@ -351,6 +358,7 @@ class CustomTextArea(TextArea):
             super().action_cursor_up(select=select)
 
 class CometTUI(App):
+    CLOSE_TIMEOUT = 0.1
     DEFAULT_CSS = """
     Screen {
         width: 100%;
@@ -609,75 +617,76 @@ class CometTUI(App):
         self.initialize_llm()
         self.check_for_updates()
 
-    @work(thread=True)
     def check_for_updates(self) -> None:
-        try:
-            current_version = importlib.metadata.version("cli-comet")
-            req = urllib.request.Request("https://pypi.org/pypi/cli-comet/json")
-            with urllib.request.urlopen(req, timeout=2.0) as response:
-                data = json.loads(response.read().decode())
-                latest_version = data["info"]["version"]
-                
-                curr_tuple = tuple(map(int, current_version.split(".")))
-                latest_tuple = tuple(map(int, latest_version.split(".")))
-                
-                if latest_tuple > curr_tuple:
-                    self.call_from_thread(self.notify, f"Update available: v{latest_version}! Run `pipx upgrade cli-comet` to install.", title="Update Available", severity="warning", timeout=15.0)
-        except Exception:
-            pass
+        def run():
+            try:
+                current_version = importlib.metadata.version("cli-comet")
+                req = urllib.request.Request("https://pypi.org/pypi/cli-comet/json")
+                with urllib.request.urlopen(req, timeout=2.0) as response:
+                    data = json.loads(response.read().decode())
+                    latest_version = data["info"]["version"]
+                    curr_tuple = tuple(map(int, current_version.split(".")))
+                    latest_tuple = tuple(map(int, latest_version.split(".")))
+                    if latest_tuple > curr_tuple:
+                        self.call_from_thread(self.notify, f"Update available: v{latest_version}! Run `pipx upgrade cli-comet` to install.", title="Update Available", severity="warning", timeout=15.0)
+            except Exception:
+                pass
+        import threading
+        threading.Thread(target=run, daemon=True).start()
 
-    @work(thread=True)
     def initialize_llm(self) -> None:
-        if self.provider == "auto":
-            lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
-            ollamaUp = check_endpoint("http://localhost:11434/api/tags")
-            if lmstudioUp and not ollamaUp:
-                self.provider = "lmstudio"
+        def run():
+            if self.provider == "auto":
+                lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
+                ollamaUp = check_endpoint("http://localhost:11434/api/tags")
+                if lmstudioUp and not ollamaUp:
+                    self.provider = "lmstudio"
+                else:
+                    self.provider = "ollama"
+
+            if self.provider == "ollama":
+                from ollama import Client as OllamaClient
+                self.client = OllamaClient()
+                try:
+                    allModelsData = sorted(self.client.list().models, key=lambda m:m.size, reverse=False)
+                    self.allModels = [m.model for m in allModelsData]
+                    loadedModels = self.client.ps().models
+                    defaultModel = loadedModels[0].model if loadedModels else (self.allModels[0] if self.allModels else "unknown")
+                except Exception:
+                    self.allModels = ["unknown"]
+                    defaultModel = "unknown"
+            elif self.provider == "lmstudio":
+                from openai import OpenAI
+                self.client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+                try:
+                    modelsData = self.client.models.list().data
+                    self.allModels = [m.id for m in modelsData]
+                    defaultModel = self.allModels[0] if self.allModels else "unknown"
+                except Exception:
+                    self.allModels = ["unknown"]
+                    defaultModel = "unknown"
+            elif self.provider == "openrouter":
+                settings = load_settings()
+                api_key = os.getenv("OPENROUTER_API_KEY") or settings.get("openrouter_api_key", "")
+                from openai import OpenAI
+                self.client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key or "missing_key")
+                try:
+                    modelsData = self.client.models.list().data
+                    self.allModels = [m.id for m in modelsData]
+                    defaultModel = "openai/gpt-4o-mini" if "openai/gpt-4o-mini" in self.allModels else (self.allModels[0] if self.allModels else "unknown")
+                except Exception:
+                    self.allModels = ["unknown"]
+                    defaultModel = "unknown"
+
+            if getattr(self, "model", "") in self.allModels and self.model != "Loading...":
+                pass
             else:
-                self.provider = "ollama"
+                self.model = defaultModel
 
-        if self.provider == "ollama":
-            from ollama import Client as OllamaClient
-            self.client = OllamaClient()
-            try:
-                allModelsData = sorted(self.client.list().models, key=lambda m:m.size, reverse=False)
-                self.allModels = [m.model for m in allModelsData]
-                loadedModels = self.client.ps().models
-                defaultModel = loadedModels[0].model if loadedModels else (self.allModels[0] if self.allModels else "unknown")
-            except Exception:
-                self.allModels = ["unknown"]
-                defaultModel = "unknown"
-        elif self.provider == "lmstudio":
-            from openai import OpenAI
-            self.client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
-            try:
-                modelsData = self.client.models.list().data
-                self.allModels = [m.id for m in modelsData]
-                defaultModel = self.allModels[0] if self.allModels else "unknown"
-            except Exception:
-                self.allModels = ["unknown"]
-                defaultModel = "unknown"
-        elif self.provider == "openrouter":
-            settings = load_settings()
-            api_key = os.getenv("OPENROUTER_API_KEY") or settings.get("openrouter_api_key", "")
-            from openai import OpenAI
-            self.client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key or "missing_key")
-            try:
-                modelsData = self.client.models.list().data
-                self.allModels = [m.id for m in modelsData]
-                defaultModel = "openai/gpt-4o-mini" if "openai/gpt-4o-mini" in self.allModels else (self.allModels[0] if self.allModels else "unknown")
-            except Exception:
-                self.allModels = ["unknown"]
-                defaultModel = "unknown"
-
-        if getattr(self, "model", "") in self.allModels and self.model != "Loading...":
-            pass
-        else:
-            self.model = defaultModel
-
-        save_settings(self.provider, self.model)
-        
-        self.call_from_thread(self.post_initialize_llm)
+            save_settings(self.provider, self.model)
+            self.call_from_thread(self.post_initialize_llm)
+        import threading
+        threading.Thread(target=run, daemon=True).start()
 
     def post_initialize_llm(self) -> None:
         self.query_one("#input_row").border_title = f"{self.model}"
@@ -728,77 +737,71 @@ class CometTUI(App):
             else:
                 subprocess.run(['xdg-open', settings_path])
 
-    @work(thread=True)
     def regenerate(self) -> None:
-        self.is_generating = True
-        self.needs_poll = True
-        if not hasattr(self, "pastResponses"):
-            self.pastResponses = set()
-            
-        systemPath = os.path.join(os.path.dirname(__file__), "system.md")
-        systemPrompt = open(systemPath, "r", encoding="utf-8").read()
-        systemPrompt += f"\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE. They are just for tone/style reference):\n{self.commits}"
-        
-        promptContent = f"Files changed:\n{self.file_status}\n\nDiff to summarize (may exclude minified/auto-generated files):\n```diff\n{self.diff}\n```"
-        
-        while True:
-            messages = [{"role": "system", "content": systemPrompt}]
-            messages.append({"role": "user", "content": promptContent})
-            
-            for pastResponse in self.pastResponses:
-                messages.append({"role": "assistant", "content": pastResponse})
-                messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
-                
-            if self.provider == "ollama":
-                from ollama import chat as ollama_chat
-                response = ollama_chat(
-                    model=self.model, 
-                    messages=messages, 
-                    options={"temperature": 0.9, "seed": random.randint(0, 1000000)}, 
-                    think=False, 
-                    keep_alive="60m", 
-                    stream=True,
-                    format=COMMIT_RESPONSE_SCHEMA
-                )
-                buffer = ""
-                for chunk in response:
-                    buffer += chunk['message']['content']
-                    self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
-                message = extract_json_message(buffer)
-            elif self.provider in ["lmstudio", "openrouter"]:
-                try:
-                    response = self.client.chat.completions.create(
+        def run():
+            self.is_generating = True
+            self.needs_poll = True
+            if not hasattr(self, "pastResponses"):
+                self.pastResponses = set()
+            systemPath = os.path.join(os.path.dirname(__file__), "system.md")
+            systemPrompt = open(systemPath, "r", encoding="utf-8").read()
+            systemPrompt += f"\n\nRecent Commits (For Context Only. DO NOT SUMMARIZE THESE. They are just for tone/style reference):\n{self.commits}"
+            promptContent = f"Files changed:\n{self.file_status}\n\nDiff to summarize (may exclude minified/auto-generated files):\n```diff\n{self.diff}\n```"
+            while True:
+                messages = [{"role": "system", "content": systemPrompt}]
+                messages.append({"role": "user", "content": promptContent})
+                for pastResponse in self.pastResponses:
+                    messages.append({"role": "assistant", "content": pastResponse})
+                    messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
+                if self.provider == "ollama":
+                    from ollama import chat as ollama_chat
+                    response = ollama_chat(
                         model=self.model, 
                         messages=messages, 
-                        temperature=0.9, 
+                        options={"temperature": 0.9, "seed": random.randint(0, 1000000)}, 
+                        think=False, 
+                        keep_alive="60m", 
                         stream=True,
-                        response_format={
-                            "type": "json_schema", 
-                            "json_schema": {"name": "CommitResponse", "schema": COMMIT_RESPONSE_SCHEMA, "strict": True}
-                        }
+                        format=COMMIT_RESPONSE_SCHEMA
                     )
-                except Exception:
-                    # Fallback to json_object if json_schema is not supported by LMStudio version
-                    messages[0]["content"] += "\nRespond with JSON: {\"commit_message\": \"...\"}"
-                    response = self.client.chat.completions.create(
-                        model=self.model, 
-                        messages=messages, 
-                        temperature=0.9, 
-                        stream=True,
-                        response_format={"type": "json_object"}
-                    )
-                
-                buffer = ""
-                for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        buffer += chunk.choices[0].delta.content
+                    buffer = ""
+                    for chunk in response:
+                        buffer += chunk['message']['content']
                         self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
-                message = extract_json_message(buffer)
-            
-            if message not in self.pastResponses:
-                self.pastResponses.add(message)
-                self.call_from_thread(self.update_textarea, message, True)
-                break
+                    message = extract_json_message(buffer)
+                elif self.provider in ["lmstudio", "openrouter"]:
+                    try:
+                        response = self.client.chat.completions.create(
+                            model=self.model, 
+                            messages=messages, 
+                            temperature=0.9, 
+                            stream=True,
+                            response_format={
+                                "type": "json_schema", 
+                                "json_schema": {"name": "CommitResponse", "schema": COMMIT_RESPONSE_SCHEMA, "strict": True}
+                            }
+                        )
+                    except Exception:
+                        messages[0]["content"] += "\nRespond with JSON: {\"commit_message\": \"...\"}"
+                        response = self.client.chat.completions.create(
+                            model=self.model, 
+                            messages=messages, 
+                            temperature=0.9, 
+                            stream=True,
+                            response_format={"type": "json_object"}
+                        )
+                    buffer = ""
+                    for chunk in response:
+                        if chunk.choices[0].delta.content is not None:
+                            buffer += chunk.choices[0].delta.content
+                            self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                    message = extract_json_message(buffer)
+                if message not in self.pastResponses:
+                    self.pastResponses.add(message)
+                    self.call_from_thread(self.update_textarea, message, True)
+                    break
+        import threading
+        threading.Thread(target=run, daemon=True).start()
 
     def update_textarea(self, message: str, finished: bool) -> None:
         textArea = self.query_one("#input", TextArea)
@@ -811,85 +814,88 @@ class CometTUI(App):
                 self._ollama_expires_at[self.model] = datetime.now() + timedelta(minutes=60)
             self.needs_poll = False
 
-    @work(thread=True)
     def update_status_loop(self) -> None:
-        try:
-            settings_path = get_settings_path()
-            if os.path.exists(settings_path):
-                current_mtime = os.path.getmtime(settings_path)
-                if not hasattr(self, "_last_settings_mtime"):
-                    self._last_settings_mtime = current_mtime
-                elif current_mtime > self._last_settings_mtime:
-                    self._last_settings_mtime = current_mtime
-                    new_settings = load_settings()
-                    
-                    new_provider = new_settings.get("provider", self.provider)
-                    new_model = new_settings.get("model", self.model)
-                    
-                    changed = False
-                    if new_provider != self.provider:
-                        self.provider = new_provider
-                        changed = True
-                    if new_model != self.model:
-                        self.model = new_model
-                        changed = True
-                        
-                    if changed:
-                        self.call_from_thread(self.initialize_llm)
-        except Exception:
-            pass
-
-        from datetime import datetime
-        if not getattr(self, "model", ""):
-            self.call_from_thread(self.update_border_title, "")
+        if getattr(self, "_checkingStatus", False):
             return
-
-        if self.provider != "ollama":
-            self.call_from_thread(self.update_border_title, f"{self.model}")
-            return
-
-        status = ""
-        expires_at = self._ollama_expires_at.get(self.model)
-        now = datetime.now(expires_at.tzinfo) if (expires_at and expires_at.tzinfo) else datetime.now()
-        secs = (expires_at - now).total_seconds() if expires_at else -1
-        
-        if expires_at and secs <= 0:
-            self.needs_poll = True
-            expires_at = None
-            secs = -1
-
-        if getattr(self, "needs_poll", False) and not self.is_generating:
+        self._checkingStatus = True
+        def run():
             try:
-                import ollama
-                ps = ollama.ps()
-                models = getattr(ps, 'models', []) if hasattr(ps, 'models') else ps.get('models', [])
-                self._ollama_expires_at.clear()
-                for m in models:
-                    m_name = getattr(m, 'model', m.get('model', '')) if hasattr(m, 'model') else m.get('model', '')
-                    m_expires = getattr(m, 'expires_at', None) if hasattr(m, 'expires_at') else m.get('expires_at')
-                    self._ollama_expires_at[m_name] = m_expires
-                    if getattr(m, 'name', ''):
-                        self._ollama_expires_at[getattr(m, 'name', '')] = m_expires
-                self.needs_poll = False
-                
+                try:
+                    settings_path = get_settings_path()
+                    if os.path.exists(settings_path):
+                        current_mtime = os.path.getmtime(settings_path)
+                        if not hasattr(self, "_last_settings_mtime"):
+                            self._last_settings_mtime = current_mtime
+                        elif current_mtime > self._last_settings_mtime:
+                            self._last_settings_mtime = current_mtime
+                            new_settings = load_settings()
+                            new_provider = new_settings.get("provider", self.provider)
+                            new_model = new_settings.get("model", self.model)
+                            changed = False
+                            if new_provider != self.provider:
+                                self.provider = new_provider
+                                changed = True
+                            if new_model != self.model:
+                                self.model = new_model
+                                changed = True
+                            if changed:
+                                self.call_from_thread(self.initialize_llm)
+                except Exception:
+                    pass
+
+                from datetime import datetime
+                if not getattr(self, "model", ""):
+                    self.call_from_thread(self.update_border_title, "")
+                    return
+
+                if self.provider != "ollama":
+                    self.call_from_thread(self.update_border_title, f"{self.model}")
+                    return
+
+                status = ""
                 expires_at = self._ollama_expires_at.get(self.model)
                 now = datetime.now(expires_at.tzinfo) if (expires_at and expires_at.tzinfo) else datetime.now()
                 secs = (expires_at - now).total_seconds() if expires_at else -1
-            except Exception:
-                pass
+                if expires_at and secs <= 0:
+                    self.needs_poll = True
+                    expires_at = None
+                    secs = -1
 
-        if self.is_generating and (expires_at is None or secs <= 0):
-            status = "Loading..."
-        elif expires_at and secs > 0:
-            mins = int(secs // 60)
-            status = f"TTL: {mins}m" if mins > 0 else "TTL: <1m"
-        else:
-            status = ""
+                if getattr(self, "needs_poll", False) and not self.is_generating:
+                    try:
+                        import ollama
+                        ps = ollama.ps()
+                        models = getattr(ps, 'models', []) if hasattr(ps, 'models') else ps.get('models', [])
+                        self._ollama_expires_at.clear()
+                        for m in models:
+                            m_name = getattr(m, 'model', m.get('model', '')) if hasattr(m, 'model') else m.get('model', '')
+                            m_expires = getattr(m, 'expires_at', None) if hasattr(m, 'expires_at') else m.get('expires_at')
+                            self._ollama_expires_at[m_name] = m_expires
+                            if getattr(m, 'name', ''):
+                                self._ollama_expires_at[getattr(m, 'name', '')] = m_expires
+                        self.needs_poll = False
+                        expires_at = self._ollama_expires_at.get(self.model)
+                        now = datetime.now(expires_at.tzinfo) if (expires_at and expires_at.tzinfo) else datetime.now()
+                        secs = (expires_at - now).total_seconds() if expires_at else -1
+                    except Exception:
+                        pass
 
-        if status:
-            self.call_from_thread(self.update_border_title, f"{self.model} ㆍ {status}")
-        else:
-            self.call_from_thread(self.update_border_title, f"{self.model}")
+                if self.is_generating and (expires_at is None or secs <= 0):
+                    status = "Loading..."
+                elif expires_at and secs > 0:
+                    mins = int(secs // 60)
+                    status = f"TTL: {mins}m" if mins > 0 else "TTL: <1m"
+                else:
+                    status = ""
+
+                if status:
+                    self.call_from_thread(self.update_border_title, f"{self.model} ㆍ {status}")
+                else:
+                    self.call_from_thread(self.update_border_title, f"{self.model}")
+            finally:
+                self._checkingStatus = False
+        import threading
+        threading.Thread(target=run, daemon=True).start()
 
     def update_border_title(self, title: str) -> None:
         try:
