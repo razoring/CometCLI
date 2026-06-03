@@ -26,6 +26,7 @@ dependencies = [
 
 [project.scripts]
 comet = "comet.cli:main"
+git-comet = "comet.cli:main"
 
 [tool.setuptools]
 packages = ["comet"]
