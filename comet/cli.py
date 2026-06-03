@@ -762,51 +762,62 @@ class CometTUI(App):
                     messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
                 if self.provider == "ollama":
                     from ollama import chat as ollama_chat
-                    response = ollama_chat(
-                        model=self.model, 
-                        messages=messages, 
-                        options={"temperature": 0.9, "seed": random.randint(0, 1000000)}, 
-                        think=False, 
-                        keep_alive="60m", 
-                        stream=True,
-                        format=COMMIT_RESPONSE_SCHEMA
-                    )
-                    buffer = ""
-                    for chunk in response:
-                        buffer += chunk['message']['content']
-                        self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
-                    message = extract_json_message(buffer)
+                    try:
+                        response = ollama_chat(
+                            model=self.model, 
+                            messages=messages, 
+                            options={"temperature": 0.9, "seed": random.randint(0, 1000000)}, 
+                            think=False, 
+                            keep_alive="60m", 
+                            stream=True,
+                            format=COMMIT_RESPONSE_SCHEMA
+                        )
+                        buffer = ""
+                        for chunk in response:
+                            buffer += chunk['message']['content']
+                            self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                        message = extract_json_message(buffer)
+                    except Exception as e:
+                        message = f"Error: {e}"
+                        self.call_from_thread(self.update_textarea, message, True)
+                        break
                 elif self.provider in ["lmstudio", "openrouter"]:
                     try:
-                        response = self.client.chat.completions.create(
-                            model=self.model, 
-                            messages=messages, 
-                            temperature=0.9, 
-                            stream=True,
-                            response_format={
-                                "type": "json_schema", 
-                                "json_schema": {"name": "CommitResponse", "schema": COMMIT_RESPONSE_SCHEMA, "strict": True}
-                            }
-                        )
-                    except Exception:
-                        messages[0]["content"] += "\nRespond with JSON: {\"commit_message\": \"...\"}"
-                        response = self.client.chat.completions.create(
-                            model=self.model, 
-                            messages=messages, 
-                            temperature=0.9, 
-                            stream=True,
-                            response_format={"type": "json_object"}
-                        )
-                    buffer = ""
-                    for chunk in response:
-                        if chunk.choices[0].delta.content is not None:
-                            buffer += chunk.choices[0].delta.content
-                            self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
-                    message = extract_json_message(buffer)
+                        try:
+                            response = self.client.chat.completions.create(
+                                model=self.model, 
+                                messages=messages, 
+                                temperature=0.9, 
+                                stream=True,
+                                response_format={
+                                    "type": "json_schema", 
+                                    "json_schema": {"name": "CommitResponse", "schema": COMMIT_RESPONSE_SCHEMA, "strict": True}
+                                }
+                            )
+                        except Exception:
+                            messages[0]["content"] += "\nRespond with JSON: {\"commit_message\": \"...\"}"
+                            response = self.client.chat.completions.create(
+                                model=self.model, 
+                                messages=messages, 
+                                temperature=0.9, 
+                                stream=True,
+                                response_format={"type": "json_object"}
+                            )
+                        buffer = ""
+                        for chunk in response:
+                            if chunk.choices[0].delta.content is not None:
+                                buffer += chunk.choices[0].delta.content
+                                self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                        message = extract_json_message(buffer)
+                    except Exception as e:
+                        message = f"Error: {e}"
+                        self.call_from_thread(self.update_textarea, message, True)
+                        break
+
                 if message not in self.pastResponses:
                     self.pastResponses.add(message)
-                    self.call_from_thread(self.update_textarea, message, True)
-                    break
+                self.call_from_thread(self.update_textarea, message, True)
+                break
         import threading
         threading.Thread(target=run, daemon=True).start()
 

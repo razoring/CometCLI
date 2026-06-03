@@ -44,11 +44,11 @@ You MUST adhere to the following rules or your output will break the system. Sma
 5. DO NOT start the line with a bullet point, dash (`-`), or asterisk (`*`).
 6. DO NOT add any introductory or concluding text (e.g. no "Here is the commit message:").
 
-The ONLY output you provide should be the raw, plain-text string matching this exact pattern:
+The ONLY output you provide should be a valid JSON object. The `commit_message` field must match this exact pattern:
 type: description
 
 Example of CORRECT output:
-feat: implement asynchronous network checking for zero latency boot
+{"commit_message": "feat: implement asynchronous network checking for zero latency boot"}
 
 Example of INCORRECT output:
-- **feat:** implement asynchronous network checking
+{"commit_message": "- **feat:** implement asynchronous network checking"}
