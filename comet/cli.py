@@ -202,6 +202,21 @@ def headless_auto_commit(provider, model, diff, file_status, commits):
         return
         
     print(f"{colorama.Fore.GREEN}Comet committed and synced successfully!{colorama.Style.RESET_ALL}")
+    check_for_updates_cli()
+
+def check_for_updates_cli():
+    try:
+        current_version = importlib.metadata.version("cli-comet")
+        req = urllib.request.Request("https://pypi.org/pypi/cli-comet/json")
+        with urllib.request.urlopen(req, timeout=1.0) as response:
+            data = json.loads(response.read().decode())
+            latest_version = data["info"]["version"]
+            curr_tuple = tuple(map(int, current_version.split(".")))
+            latest_tuple = tuple(map(int, latest_version.split(".")))
+            if latest_tuple > curr_tuple:
+                print(f"\n{colorama.Fore.YELLOW}Update available: v{latest_version}! Run `pipx upgrade cli-comet` to install.{colorama.Style.RESET_ALL}")
+    except Exception:
+        pass
 
 def run_init():
     import sys
