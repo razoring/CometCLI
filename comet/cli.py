@@ -305,6 +305,7 @@ def main():
     parser.add_argument("-a", "--auto", action="store_true", help="Skip the UI and automatically commit and sync")
     parser.add_argument("-i", "--init", action="store_true", help="Initialize Comet and configure QuickStartup")
     parser.add_argument("--warmup", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--undo", action="store_true", help="Undo the last commit")
     args = parser.parse_args()
 
     if args.init:
@@ -313,6 +314,11 @@ def main():
 
     if args.warmup:
         run_warmup()
+        return
+
+    if args.undo:
+        print(f"{colorama.Fore.CYAN}Undoing last commit...{colorama.Style.RESET_ALL}")
+        subprocess.run(["git", "reset", "HEAD~1"])
         return
 
     settings = load_settings()
