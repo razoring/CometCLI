@@ -78,7 +78,7 @@ def check_endpoint(url):
     except (urllib.error.URLError, ValueError):
         return False
 
-def headless_auto_commit(provider, model, diff, file_status, commits):
+def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=True, do_push=True):
     print(f"{colorama.Fore.CYAN}Generating auto-commit with {provider}...{colorama.Style.RESET_ALL}")
     
     client = None
@@ -189,10 +189,16 @@ def headless_auto_commit(provider, model, diff, file_status, commits):
         
     print(f"\n{colorama.Fore.GREEN}Generated Message:{colorama.Style.RESET_ALL}\n{message}\n")
     
+    if not do_commit:
+        return
+        
     print(f"{colorama.Fore.CYAN}Committing...{colorama.Style.RESET_ALL}")
     commit_res = subprocess.run(["git", "commit", "-m", message], capture_output=True, text=True)
     if commit_res.returncode != 0:
         print(f"{colorama.Fore.RED}Commit failed:\n{commit_res.stderr}{colorama.Style.RESET_ALL}")
+        return
+        
+    if not do_push:
         return
         
     print(f"{colorama.Fore.CYAN}Pushing to remote...{colorama.Style.RESET_ALL}")
@@ -368,6 +374,37 @@ def main():
         app = CometTUI(commit="Generating...", model=model, diff=diff, file_status=status, commits=commits, allModels=[], provider=provider, client=None)
         result = app.run()
         if result: print(result)
+
+def main_git_comet():
+    settings = load_settings()
+    provider = settings.get("provider", "auto")
+    model = settings.get("model", "")
+
+    subprocess.run(["git", "add", "."], cwd=os.getcwd(), capture_output=True)
+
+    diff_args = [
+        "git", "diff", "HEAD", "-U5", "--", ".",
+        ":(exclude)package-lock.json",
+        ":(exclude)yarn.lock",
+        ":(exclude)pnpm-lock.yaml",
+        ":(exclude)poetry.lock",
+        ":(exclude)Cargo.lock",
+        ":(exclude)Gemfile.lock",
+        ":(exclude)uv.lock",
+        ":(exclude)*.min.js",
+        ":(exclude)*.min.css",
+        ":(exclude)*.svg"
+    ]
+    diff = subprocess.run(diff_args, cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
+    
+    if not diff.strip():
+        print(f"{colorama.Fore.YELLOW}No changes detected. Exiting.{colorama.Style.RESET_ALL}")
+        return
+        
+    status = subprocess.run(["git", "diff", "--name-status", "HEAD"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
+    commits = subprocess.run(["git", "log", "-n", "5", "--oneline"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
+    
+    headless_auto_commit(provider, model, diff, status, commits, do_commit=False, do_push=False)
 
 from textual.app import App, ComposeResult
 from textual.widgets import TextArea, Button, Label
