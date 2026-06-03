@@ -266,6 +266,15 @@ def run_init():
         pass
         
     print(f"{colorama.Fore.GREEN}Saved settings. Model: {model}{colorama.Style.RESET_ALL}")
+
+    if provider == "ollama" and model and model != "unknown":
+        try:
+            print(f"{colorama.Fore.CYAN}Preloading model {model} with a 3 hour TTL...{colorama.Style.RESET_ALL}")
+            client.generate(model=model, prompt="", keep_alive="3h")
+            print(f"{colorama.Fore.GREEN}Model preloaded successfully!{colorama.Style.RESET_ALL}")
+        except Exception as e:
+            print(f"{colorama.Fore.RED}Failed to preload model: {e}{colorama.Style.RESET_ALL}")
+    
     
     if os.name == 'nt':
         try:
@@ -289,7 +298,11 @@ def run_warmup():
         try:
             from ollama import Client as OllamaClient
             client = OllamaClient()
-            client.list() 
+            model = settings.get("model", "")
+            if model and model != "unknown":
+                client.generate(model=model, prompt="", keep_alive="3h")
+            else:
+                client.list()
         except Exception:
             pass
     elif provider == "lmstudio":
