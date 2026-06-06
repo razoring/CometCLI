@@ -17,9 +17,7 @@ classifiers = [
     "Operating System :: OS Independent",
     "Environment :: Console",
 ]
-dependencies = [
-    "textual"
-]
+dependencies = []
 
 [project.scripts]
 comet = "comet.cli:main"
