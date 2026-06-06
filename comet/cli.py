@@ -30,9 +30,15 @@ def extract_json_message(buffer: str) -> str:
         text = text.rstrip(" \n\r\t}")
         if text.endswith('"'): text = text[:-1]
         text = text.replace('\\n', '\n').replace('\\"', '"')
+        if '\n' in text:
+            #discard everything after newline
+            text = text.split('\n')[0]
         return text
 
     if buffer.lstrip().startswith("{"): return ""
+    if '\n' in buffer:
+        #discard everything after newline
+        buffer = buffer.split('\n')[0]
     return buffer
 
 def fetch_json(url, headers=None, data=None, timeout=2.0):
@@ -438,10 +444,184 @@ def main_git_comet():
     
     headless_auto_commit(provider, model, diff, status, commits, do_commit=False, do_push=False)
 
-from .render import CustomTUI, TextArea, Button, Label
+from textual.app import App, ComposeResult
+from textual.widgets import TextArea, Button, Label
+from textual.containers import Horizontal, Vertical
+from textual.binding import Binding
+from textual import work, events
 import subprocess
 
-class CometTUI(CustomTUI):
+class CustomTextArea(TextArea):
+    BINDINGS = [
+        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+        Binding("escape", "exit_action", "Terminate", priority=True)
+    ]
+
+    def action_cursor_down(self, select: bool = False) -> None:
+        if self.cursor_location[0] == self.document.line_count - 1:
+            loc = self.cursor_location
+            self.cursor_location = (self.document.line_count - 1, len(self.document.get_line(self.document.line_count - 1)))
+            self.insert("\n")
+            self.cursor_location = (loc[0] + 1, min(loc[1], len(self.document.get_line(loc[0] + 1))))
+        else:
+            super().action_cursor_down(select=select)
+
+    def action_cursor_up(self, select: bool = False) -> None:
+        row = self.cursor_location[0]
+        if row > 0 and row == self.document.line_count - 1 and len(self.document.get_line(row)) == 0:
+            self.action_delete_left()
+        else:
+            super().action_cursor_up(select=select)
+
+class CometTUI(App):
+    CLOSE_TIMEOUT = 0.1
+    DEFAULT_CSS = """
+    Screen {
+        width: 100%;
+        height: 100%;
+        align: center middle;
+        background: $surface;
+    }
+
+    Static {
+        background: $surface;
+    }
+
+    Button {
+        border: none;
+    }
+    
+    Button:focus {
+        border: none;
+    }
+    
+    Button:hover {
+        border: none;
+    }
+
+    #main_container {
+        width: 100%;
+        height: 100%;
+        padding: 1 2;
+        background: $surface;
+        layers: under default;
+    }
+
+    #input_row {
+        height: auto;
+        padding: 1;
+        background: $surface;
+        border: solid $panel;
+        border-title-color: $text-muted;
+    }
+
+    #input_row:focus-within {
+        border: solid $primary;
+        border-title-color: $primary; 
+    }
+
+    #input_row.committed {
+        border: solid $panel;
+        border-title-color: $text-muted;
+    }
+
+    #input {
+        width: 1fr;
+        height: 3;
+        border: none;
+        background: transparent;
+    }
+
+    #input:focus {
+        border: none;
+    }
+
+    #regenBtn {
+        height: 3;
+        margin-left: 1;
+        background: $primary;
+        border: none;
+    }
+
+    #action_row {
+        height: auto;
+        margin-top: 1;
+    }
+
+    #commitBtn {
+        width: 1fr;
+        height: 3;
+        background: $primary;
+        border: none;
+    }
+
+    #undoBtn {
+        width: 1fr;
+        margin-left: 1;
+        height: 3;
+        background: $secondary;
+        border: none;
+    }
+
+    #cancelBtn {
+        margin-left: 1;
+        height: 3;
+        background: $secondary;
+        border: none;
+    }
+
+    #shortcuts {
+        width: 100%;
+        text-align: center;
+        color: $text-muted;
+        margin-top: 1;
+    }
+
+    #bottom_row {
+        dock: bottom;
+        layer: under;
+        width: 100%;
+        height: 1;
+        margin-top: 1;
+    }
+
+    #cwd_label {
+        width: 1fr;
+        height: 1;
+        color: $text-muted;
+        padding-left: 1;
+        overflow: hidden;
+    }
+
+    #settingsBtn {
+        width: auto;
+        height: 1;
+        border: none;
+        background: transparent;
+        color: $text-muted;
+        margin-right: 1;
+    }
+
+    #settingsBtn:hover {
+        color: $text;
+    }
+
+    #logo {
+        width: 100%;
+        text-align: center;
+        color: $primary;
+        margin-bottom: 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+        Binding("escape", "exit_action", "Quit", priority=True),
+        Binding("ctrl+z", "undo_commit", "Undo Commit", priority=True),
+        Binding("tab", "swap_model", "Swap Model", priority=True),
+        Binding("enter", "commit_action", "Continue", priority=True)
+    ]
+
     def __init__(self, commit: str, model: str, diff: str, file_status: str, commits: str, allModels: list[str], provider: str = "ollama", client = None):
         super().__init__()
         self.commit = commit
@@ -456,73 +636,28 @@ class CometTUI(CustomTUI):
         self.needs_poll = True
         self._ollama_expires_at = {}
 
-    def _compose_layout(self):
-        self.widgets.clear()
-        
-        path = "~" + os.getcwd()[len(os.path.expanduser("~")):] if os.getcwd().startswith(os.path.expanduser("~")) else os.getcwd().replace(os.sep, "/") + "/"
-        self.widgets["cwd_label"] = Label(f" {path}", id="cwd_label")
-        self.widgets["cwd_label"].x = 1
-        self.widgets["cwd_label"].y = self.term_height - 2
-        
-        self.widgets["settingsBtn"] = Button(" ⚙  Settings ", id="settingsBtn", action=self.action_settings)
-        self.widgets["settingsBtn"].x = self.term_width - 15
-        self.widgets["settingsBtn"].y = self.term_height - 2
+    def compose(self) -> ComposeResult:
+        with Vertical(id="main_container"):
+            path = "~" + os.getcwd()[len(os.path.expanduser("~")):] if os.getcwd().startswith(os.path.expanduser("~")) else os.getcwd().replace(os.sep, "/") + "/"
+            with Horizontal(id="bottom_row"):
+                yield Label(f" {path}", id="cwd_label")
+                yield Button(" ⚙  Settings ", id="settingsBtn")
 
-        logo = " ▄▄▄▄  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄▄ ▄▄▄▄▄▄   ┌─┐┬  ┬\n██▀▀▀ ██▀██ ██▀▄▀██ ██▄▄    ██     │  │  │\n▀████ ▀███▀ ██   ██ ██▄▄▄   ██     └─┘┴─┘┴"
-        logo_lines = logo.split('\n')
-        logo_y = 2
-        logo_x = max(1, (self.term_width - len(logo_lines[0])) // 2)
-        self.widgets["logo"] = Label(logo, id="logo", style="\033[38;5;33m")
-        self.widgets["logo"].x = logo_x
-        self.widgets["logo"].y = logo_y
-
-        input_y = logo_y + 4
-        self.widgets["input"] = TextArea(text=self.commit, id="input")
-        self.widgets["input"].x = 3
-        self.widgets["input"].y = input_y
-        self.widgets["input"].width = self.term_width - 6
-        self.widgets["input"].height = 5
-        
-        btn_y = input_y + 6
-        self.widgets["regenBtn"] = Button(" ₊✦  Regenerate  ", id="regenBtn", action=self.action_regenerate_action)
-        self.widgets["regenBtn"].x = self.term_width - 20
-        self.widgets["regenBtn"].y = btn_y
-        
-        self.widgets["commitBtn"] = Button(" ✔  Commit ", id="commitBtn", action=self.action_commit_action)
-        self.widgets["commitBtn"].x = 3
-        self.widgets["commitBtn"].y = btn_y
-        
-        self.widgets["undoBtn"] = Button(" ↺  Undo ", id="undoBtn", action=self.action_undo_commit)
-        self.widgets["undoBtn"].x = 18
-        self.widgets["undoBtn"].y = btn_y
-        self.widgets["undoBtn"].disabled = True
-
-        self.widgets["cancelBtn"] = Button(" ⛌  Quit ", id="cancelBtn", action=self.action_exit_action)
-        self.widgets["cancelBtn"].x = 30
-        self.widgets["cancelBtn"].y = btn_y
-
-        self.widgets["shortcuts"] = Label("ctrl+r regenerate    enter continue    tab swap model    ctrl+z undo    esc quit", id="shortcuts", style="\033[38;5;238m")
-        self.widgets["shortcuts"].x = max(1, (self.term_width - len(self.widgets["shortcuts"].text)) // 2)
-        self.widgets["shortcuts"].y = self.term_height - 1
-
-        self.tab_order = ["input", "commitBtn", "cancelBtn", "regenBtn", "settingsBtn", "undoBtn"]
-        if "input" in self.widgets:
-            self.widgets["input"].focused = True
-
-    def handle_global_event(self, event):
-        if event.type == "keypress":
-            key = event.data["key"]
-            if key == "ctrl+r":
-                self.action_regenerate_action()
-            elif key == "ctrl+z":
-                self.action_undo_commit()
-            elif key == "tab" and getattr(self, "_swapping", False) == False:
-                self._swapping = True
-                self.action_swap_model()
-                self._swapping = False
+            #ascii logo
+            yield Label(""" ▄▄▄▄  ▄▄▄  ▄▄   ▄▄ ▄▄▄▄▄ ▄▄▄▄▄▄   ┌─┐┬  ┬\n██▀▀▀ ██▀██ ██▀▄▀██ ██▄▄    ██     │  │  │\n▀████ ▀███▀ ██   ██ ██▄▄▄   ██     └─┘┴─┘┴""", id="logo")
+            with Horizontal(id="input_row"):
+                yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
+                yield Button(" ₊✦  Regenerate  ", id="regenBtn")
+            with Horizontal(id="action_row"):
+                undo = Button(" ↺  Undo ", id="undoBtn")
+                yield Button(" ✔  Commit ", id="commitBtn")
+                undo.display = False
+                yield undo
+                yield Button(" ⛌  Quit ", id="cancelBtn")
+            yield Label("[$text][b]ctrl+r[/b][/] regenerate    [$text][b]enter[/b][/] continue    [$text][b]tab[/b][/] swap model    [$text][b]ctrl+z[/b][/] undo    [$text][b]↓/↑[/b][/] move lines    [$text][b]esc[/b][/] quit", id="shortcuts")
 
     def action_swap_model(self) -> None:
-        if self.widgets["undoBtn"].disabled == False:
+        if self.query_one("#input_row").has_class("committed"):
             return
         if not self.allModels: return
         try:
@@ -531,80 +666,77 @@ class CometTUI(CustomTUI):
             currentIndex = -1
         nextIndex = (currentIndex + 1) % len(self.allModels)
         self.model = self.allModels[nextIndex]
-        self.border_title = f"{self.model}"
+        self.query_one("#input_row").border_title = f"{self.model}"
         save_settings(self.provider, self.model)
-        self.draw()
 
     def action_regenerate_action(self) -> None:
-        if self.widgets["regenBtn"].disabled:
-            return
-        self.widgets["regenBtn"].disabled = True
-        self.widgets["input"].text = ""
-        self.regenerate()
+        regenBtn = self.query_one("#regenBtn", Button)
+        if not regenBtn.disabled:
+            regenBtn.press()
 
     def action_exit_action(self) -> None:
         self.exit(f"\033[31mUser cancelled the operation. \033[0m")
 
     def action_commit_action(self) -> None:
-        commitBtn = self.widgets["commitBtn"]
-        if commitBtn.disabled:
-            return
-        if str(commitBtn.label).strip() == "Sync  ➤":
-            commitBtn.label = "Syncing..."
-            commitBtn.disabled = True
-            self.draw()
-            subprocess.run(["git", "push"], capture_output=True)
-            self.exit(f"\033[32mComet committed and synced successfully! \033[0m")
-            return
-
-        finalMessage = self.widgets["input"].text.strip()
-        subprocess.run(["git", "commit", "-m", finalMessage], capture_output=True)
-        commitBtn.label = "Sync  ➤"
-        self.widgets["undoBtn"].disabled = False
-        self.widgets["cancelBtn"].disabled = True
-        
-        self.widgets["input"].disabled = True
-        self.widgets["regenBtn"].disabled = True
-        self.draw()
+        commitBtn = self.query_one("#commitBtn", Button)
+        if not commitBtn.disabled:
+            commitBtn.press()
 
     def action_undo_commit(self) -> None:
-        commitBtn = self.widgets["commitBtn"]
+        commitBtn = self.query_one("#commitBtn", Button)
         if str(commitBtn.label).strip() == "Sync  ➤":
             subprocess.run(["git", "reset", "HEAD~1"], capture_output=True)
-            commitBtn.label = " ✔  Commit "
-            self.widgets["undoBtn"].disabled = True
-            self.widgets["cancelBtn"].disabled = False
-            self.widgets["input"].disabled = False
-            self.widgets["regenBtn"].disabled = False
-            self.draw()
-
-    def action_settings(self) -> None:
-        import platform
-        settings_path = get_settings_path()
-        if platform.system() == 'Windows':
-            os.startfile(settings_path)
-        elif platform.system() == 'Darwin':
-            subprocess.run(['open', settings_path])
-        else:
-            subprocess.run(['xdg-open', settings_path])
+            commitBtn.label = " ✔   Commit "
+            self.query_one("#undoBtn").display = False
+            self.query_one("#cancelBtn").display = True
+            
+            textArea = self.query_one("#input", TextArea)
+            textArea.disabled = False
+            input_row = self.query_one("#input_row")
+            input_row.remove_class("committed")
+            self.query_one("#regenBtn").disabled = False
 
     def on_mount(self) -> None:
         if self.provider == "auto" or self.model == "":
             self.notify("Welcome! This is the longest it'll take to load. :D", title="Scanning Providers", severity="information", timeout=3.0)
-        self.border_title = f"{self.model}"
-        self.widgets["regenBtn"].disabled = True
-        self.widgets["commitBtn"].disabled = True
+        self.query_one("#input_row").border_title = f"{self.model}"
+        self.query_one("#regenBtn").disabled = True
+        self.query_one("#commitBtn").disabled = True
         self.set_interval(2.0, self.update_status_loop)
         
+        try:
+            from textual.color import Color
+            v = self.get_css_variables()
+            
+            def resolve_color(val, default_hex):
+                if val.startswith("auto") or not val: return default_hex
+                return val
+                
+            # Default to dark mode colors (#1e1e1e surface, #ffffff text) if unresolved
+            surface_str = resolve_color(v.get("surface", "#1E1E1E"), "#1E1E1E")
+            text_str = resolve_color(v.get("text", "#ffffff"), "#ffffff")
+            
+            surface = Color.parse(surface_str)
+            text = Color.parse(text_str)
+            blended = surface.blend(text, 0.6)
+            
+            css = f"""
+            #input_row {{ border: solid {blended.hex}; }}
+            #input_row.committed {{ border: solid {blended.hex}; }}
+            #input_row:focus-within {{ border: solid $primary; border-title-color: $primary; }}
+            """
+            self.stylesheet.add_source(css)
+            self.stylesheet.update(self)
+        except Exception:
+            pass
+
         self.initialize_llm()
         self.check_for_updates()
 
     def check_for_updates(self) -> None:
         def run():
             try:
-                import importlib.metadata
                 current_version = importlib.metadata.version("cli-comet")
-                import urllib.request, json
                 req = urllib.request.Request("https://pypi.org/pypi/cli-comet/json")
                 with urllib.request.urlopen(req, timeout=2.0) as response:
                     data = json.loads(response.read().decode())
@@ -612,7 +744,7 @@ class CometTUI(CustomTUI):
                     curr_tuple = tuple(map(int, current_version.split(".")))
                     latest_tuple = tuple(map(int, latest_version.split(".")))
                     if latest_tuple > curr_tuple:
-                        self.notify(f"Update available: v{latest_version}! Run `pipx upgrade cli-comet` to install.", title="Update Available", severity="warning", timeout=15.0)
+                        self.call_from_thread(self.notify, f"Update available: v{latest_version}! Run `pipx upgrade cli-comet` to install.", title="Update Available", severity="warning", timeout=15.0)
             except Exception:
                 pass
         import threading
@@ -664,14 +796,58 @@ class CometTUI(CustomTUI):
                 self.model = defaultModel
 
             save_settings(self.provider, self.model)
-            self.post_initialize_llm()
+            self.call_from_thread(self.post_initialize_llm)
         import threading
         threading.Thread(target=run, daemon=True).start()
 
     def post_initialize_llm(self) -> None:
-        self.border_title = f"{self.model}"
-        self.widgets["commitBtn"].disabled = False
+        self.query_one("#input_row").border_title = f"{self.model}"
+        self.query_one("#commitBtn").disabled = False
         self.regenerate()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "commitBtn":
+            if str(event.button.label).strip() == "Sync  ➤":
+                event.button.label = "Syncing..."
+                event.button.disabled = True
+                subprocess.run(["git", "push"], capture_output=True)
+                self.exit(f"\033[32mComet committed and synced successfully! \033[0m")
+                return
+
+            textArea = self.query_one("#input", TextArea)
+            finalMessage = textArea.text.strip()
+            
+            subprocess.run(["git", "commit", "-m", finalMessage], capture_output=True)
+            event.button.label = "Sync  ➤"
+            self.query_one("#undoBtn").display = True
+            self.query_one("#cancelBtn").display = False
+            
+            textArea.disabled = True
+            input_row = self.query_one("#input_row")
+            input_row.add_class("committed")
+            self.query_one("#regenBtn").disabled = True
+            
+        elif event.button.id == "cancelBtn":
+            self.exit(f"\033[31mUser cancelled the operation. \033[0m")
+
+        elif event.button.id == "undoBtn":
+            self.action_undo_commit()
+            
+        elif event.button.id == "regenBtn":
+            event.button.disabled = True
+            textArea = self.query_one("#input", TextArea)
+            textArea.text = ""
+            self.regenerate()
+
+        elif event.button.id == "settingsBtn":
+            import platform
+            settings_path = get_settings_path()
+            if platform.system() == 'Windows':
+                os.startfile(settings_path)
+            elif platform.system() == 'Darwin':
+                subprocess.run(['open', settings_path])
+            else:
+                subprocess.run(['xdg-open', settings_path])
 
     def regenerate(self) -> None:
         def run():
@@ -762,18 +938,15 @@ class CometTUI(CustomTUI):
         threading.Thread(target=run, daemon=True).start()
 
     def update_textarea(self, message: str, finished: bool) -> None:
-        if "input" in self.widgets:
-            if message or (finished and not self.widgets["input"].text):
-                self.widgets["input"].text = message
+        textArea = self.query_one("#input", TextArea)
+        textArea.text = message
         if finished:
-            if "regenBtn" in self.widgets:
-                self.widgets["regenBtn"].disabled = False
+            self.query_one("#regenBtn").disabled = False
             self.is_generating = False
             if self.provider == "ollama":
                 from datetime import datetime, timedelta
                 self._ollama_expires_at[self.model] = datetime.now() + timedelta(minutes=60)
             self.needs_poll = False
-            self.draw()
 
     def update_status_loop(self) -> None:
         if getattr(self, "_checkingStatus", False):
@@ -865,7 +1038,9 @@ class CometTUI(CustomTUI):
         threading.Thread(target=run, daemon=True).start()
 
     def update_border_title(self, title: str) -> None:
-        self.border_title = title
-        self.draw()
+        try:
+            self.query_one("#input_row").border_title = title
+        except Exception:
+            pass
 
 if __name__ == "__main__": main()
