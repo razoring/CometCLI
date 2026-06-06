@@ -16,6 +16,7 @@ Comet is a terminal user interface application that automatically generates desc
 - **Headless Automation**: Run `comet --auto` (or `-a`) to skip the UI entirely and automatically generate, commit, and push in one command.
 - **Terminal User Interface**: Built with Textual. It provides a dedicated text area to edit the generated message.
 - **Git Integration**: Commit your changes and immediately push them to your remote repository with a second press of the commit button.
+- **Native Git Command**: Run `git comet` to use Comet as if it were a native git command.
 - **Model Auto-Selection**: Automatically detects the smallest model that can run on your system to minimize token usage and response latency.
 - **Hotswap Models**: Press `tab` to quickly cycle through available models directly from the interface. 
 - **Local & Cloud Generation**: Connects to your local AI servers or the OpenRouter API to generate commit messages.
@@ -69,6 +70,12 @@ Run the Comet application:
 
 ```bash
 comet
+```
+
+Or run it as a native git command:
+
+```bash
+git comet
 ```
 
 To bypass the UI and automatically generate, commit, and push your changes in one step:
