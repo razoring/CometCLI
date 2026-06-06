@@ -414,7 +414,7 @@ def main():
         result = app.run()
         if result: print(result)
 
-def main_git_comet():
+def main_git_auto():
     settings = load_settings()
     provider = settings.get("provider", "auto")
     model = settings.get("model", "")

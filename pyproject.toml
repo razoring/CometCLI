@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-comet"
-version = "1.3.1"
+version = "1.3.2"
 description = "A terminal UI that automatically generates git commit messages using local language models via Ollama."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,7 +23,7 @@ dependencies = [
 
 [project.scripts]
 comet = "comet.cli:main"
-git-comet = "comet.cli:main_git_comet"
+git-auto = "comet.cli:main_git_auto"
 
 [tool.setuptools]
 packages = ["comet"]
