@@ -30,6 +30,7 @@ def extract_json_message(buffer: str) -> str:
         text = text.rstrip(" \n\r\t}")
         if text.endswith('"'): text = text[:-1]
         text = text.replace('\\n', '\n').replace('\\"', '"')
+        text = text.strip()
         if '\n' in text:
             #discard everything after newline
             text = text.split('\n')[0]
