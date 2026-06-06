@@ -174,6 +174,17 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
                         chunk = json.loads(line.decode('utf-8'))
                         if "message" in chunk and "content" in chunk["message"]:
                             buffer += chunk["message"]["content"]
+                            msg = extract_json_message(buffer)
+                            if msg:
+                                sys.stdout.write('\r\033[K' + '\033[32m' + msg.replace('\n', ' ') + '\033[0m')
+                                sys.stdout.flush()
+                print()
+                message = extract_json_message(buffer)
+                if not message and buffer:
+                    message = buffer
+            else:
+                print(f"\033[31mError: Failed to fetch response.\033[0m")
+                return None
         elif provider in ["lmstudio", "openrouter"]:
             settings = load_settings()
             base_url = "http://localhost:1234/v1" if provider == "lmstudio" else "https://openrouter.ai/api/v1"
@@ -196,6 +207,17 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
                         chunk = json.loads(line_text[6:])
                         if chunk.get("choices") and chunk["choices"][0].get("delta", {}).get("content"):
                             buffer += chunk["choices"][0]["delta"]["content"]
+                            msg = extract_json_message(buffer)
+                            if msg:
+                                sys.stdout.write('\r\033[K' + '\033[32m' + msg.replace('\n', ' ') + '\033[0m')
+                                sys.stdout.flush()
+                print()
+                message = extract_json_message(buffer)
+                if not message and buffer:
+                    message = buffer
+            else:
+                print(f"\033[31mError: Failed to fetch response.\033[0m")
+                return None
     except Exception as e:
         print(f"\033[31mAPI Error: {e}\033[0m")
         return
@@ -858,8 +880,12 @@ class CometTUI(App):
                                     chunk = json.loads(line.decode('utf-8'))
                                     if "message" in chunk and "content" in chunk["message"]:
                                         buffer += chunk["message"]["content"]
-                                        self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                                        msg = extract_json_message(buffer)
+                                        if msg:
+                                            self.call_from_thread(self.update_textarea, msg, False)
                             message = extract_json_message(buffer)
+                            if not message and buffer:
+                                message = buffer
                         else:
                             message = "Error: Failed to fetch response."
                     except Exception as e:
@@ -891,8 +917,12 @@ class CometTUI(App):
                                     chunk = json.loads(line_text[6:])
                                     if chunk.get("choices") and chunk["choices"][0].get("delta", {}).get("content"):
                                         buffer += chunk["choices"][0]["delta"]["content"]
-                                        self.call_from_thread(self.update_textarea, extract_json_message(buffer), False)
+                                        msg = extract_json_message(buffer)
+                                        if msg:
+                                            self.call_from_thread(self.update_textarea, msg, False)
                             message = extract_json_message(buffer)
+                            if not message and buffer:
+                                message = buffer
                         else:
                             message = "Error: Failed to fetch response."
                     except Exception as e:
