@@ -30,15 +30,9 @@ def extract_json_message(buffer: str) -> str:
         text = text.rstrip(" \n\r\t}")
         if text.endswith('"'): text = text[:-1]
         text = text.replace('\\n', '\n').replace('\\"', '"')
-        if '\n' in text:
-            #discard everything after newline
-            text = text.split('\n')[0]
         return text
 
     if buffer.lstrip().startswith("{"): return ""
-    if '\n' in buffer:
-        #discard everything after newline
-        buffer = buffer.split('\n')[0]
     return buffer
 
 def fetch_json(url, headers=None, data=None, timeout=2.0):
