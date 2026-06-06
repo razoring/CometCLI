@@ -18,10 +18,7 @@ classifiers = [
     "Environment :: Console",
 ]
 dependencies = [
-    "ollama",
-    "textual",
-    "colorama",
-    "openai"
+    "textual"
 ]
 
 [project.scripts]
