@@ -128,8 +128,12 @@ def check_endpoint(url):
     except (urllib.error.URLError, ValueError):
         return False
 
-def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=True, do_push=True):
-    print(f"\033[36mGenerating auto-commit with {provider}...\033[0m")
+def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=True, do_push=True, chunk_callback=None, quiet=False):
+    def _print(msg, end="\n"):
+        if not quiet:
+            print(msg, end=end)
+            
+    _print(f"\033[36mGenerating auto-commit with {provider}...\033[0m")
     
     client = None
     if provider == "auto":
@@ -177,7 +181,7 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
         model = defaultModel
         
     save_settings(provider, model)
-    print(f"\033[33mModel active: {model}\033[0m")
+    _print(f"\033[33mModel active: {model}\033[0m")
     
     systemPath = os.path.join(os.path.dirname(__file__), "system.md")
     systemPrompt = open(systemPath, "r", encoding="utf-8").read()
@@ -207,14 +211,18 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
                             buffer += chunk["message"]["content"]
                             msg = extract_json_message(buffer)
                             if msg:
-                                sys.stdout.write('\r\033[K' + '\033[32m' + msg.replace('\n', ' ') + '\033[0m')
-                                sys.stdout.flush()
-                print()
+                                if chunk_callback:
+                                    chunk_callback(msg, False)
+                                else:
+                                    sys.stdout.write('\r\033[K' + '\033[32m' + msg.replace('\n', ' ') + '\033[0m')
+                                    sys.stdout.flush()
+                if not chunk_callback:
+                    _print("")
                 message = extract_json_message(buffer)
                 if not message and buffer:
                     message = buffer
             else:
-                print(f"\033[31mError: Failed to fetch response.\033[0m")
+                _print(f"\033[31mError: Failed to fetch response.\033[0m")
                 return None
         elif provider in ["lmstudio", "openrouter"]:
             settings = load_settings()
@@ -240,52 +248,60 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
                             buffer += chunk["choices"][0]["delta"]["content"]
                             msg = extract_json_message(buffer)
                             if msg:
-                                sys.stdout.write('\r\033[K' + '\033[32m' + msg.replace('\n', ' ') + '\033[0m')
-                                sys.stdout.flush()
-                print()
+                                if chunk_callback:
+                                    chunk_callback(msg, False)
+                                else:
+                                    sys.stdout.write('\r\033[K' + '\033[32m' + msg.replace('\n', ' ') + '\033[0m')
+                                    sys.stdout.flush()
+                if not chunk_callback:
+                    _print("")
                 message = extract_json_message(buffer)
                 if not message and buffer:
                     message = buffer
             else:
-                print(f"\033[31mError: Failed to fetch response.\033[0m")
+                _print(f"\033[31mError: Failed to fetch response.\033[0m")
                 return None
     except Exception as e:
-        print(f"\033[31mAPI Error: {e}\033[0m")
+        _print(f"\033[31mAPI Error: {e}\033[0m")
         return
 
     message = extract_json_message(buffer)
     if not message:
-        print(f"\033[31mFailed to generate a valid commit message. Output was: {buffer}\033[0m")
+        _print(f"\033[31mFailed to generate a valid commit message. Output was: {buffer}\033[0m")
+        if chunk_callback:
+            chunk_callback(buffer, True)
         return
         
-    print(f"\n\033[32mGenerated Message:\033[0m\n{message}\n")
+    _print(f"\n\033[32mGenerated Message:\033[0m\n{message}\n")
+    if chunk_callback:
+        chunk_callback(message, True)
     
     if not do_commit:
         return
         
-    print(f"\033[36mCommitting...\033[0m")
+    _print(f"\033[36mCommitting...\033[0m")
     commit_res = subprocess.run(["git", "commit", "-m", message], capture_output=True, text=True)
     if commit_res.returncode != 0:
-        print(f"\033[31mCommit failed:\n{commit_res.stderr}\033[0m")
+        _print(f"\033[31mCommit failed:\n{commit_res.stderr}\033[0m")
         return
         
     if not do_push:
         return
         
-    print(f"\033[36mPushing to remote...\033[0m")
+    _print(f"\033[36mPushing to remote...\033[0m")
     push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
     if push_res.returncode != 0:
-        print(f"\033[33mPush failed, attempting to pull and retry...\033[0m")
+        _print(f"\033[33mPush failed, attempting to pull and retry...\033[0m")
         pull_res = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True)
         if pull_res.returncode != 0:
-            print(f"\033[31mSync failed (resolve conflicts manually):\n{pull_res.stderr}\n{push_res.stderr}\033[0m")
+            _print(f"\033[31mSync failed (resolve conflicts manually):\n{pull_res.stderr}\n{push_res.stderr}\033[0m")
             return
         push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
         if push_res.returncode != 0:
-            print(f"\033[31mPush failed:\n{push_res.stderr}\033[0m")
+            _print(f"\033[31mPush failed:\n{push_res.stderr}\033[0m")
             return
         
-    print(f"\033[32mComet committed and synced successfully!\033[0m")
+    _print(f"\033[32mComet committed and synced successfully!\033[0m")
     check_for_updates_cli()
 
 def check_for_updates_cli():
@@ -1175,7 +1191,7 @@ class DummyWidget:
     def has_class(self, *a, **k): return False
     def press(self): pass
 
-class GitAutoTUI(CometTUI):
+class GitAutoTUI(App):
     DEFAULT_CSS = """
     Screen { background: transparent; overflow: hidden; scrollbar-size: 0 0; }
     #main_container {
@@ -1195,25 +1211,65 @@ class GitAutoTUI(CometTUI):
     #input > .text-area--cursor-line { background: transparent; }
     """
 
+    BINDINGS = [
+        Binding("ctrl+r", "regenerate_action", "Regenerate", priority=True),
+        Binding("escape", "exit_action", "Quit", priority=True),
+        Binding("enter", "commit_action", "Continue", priority=True)
+    ]
+
+    def __init__(self, commit: str, model: str, diff: str, file_status: str, commits: str, allModels: list[str], provider: str = "ollama", client = None):
+        super().__init__()
+        self.commit = commit
+        self.model = model or ""
+        self.diff = diff
+        self.file_status = file_status
+        self.commits = commits
+        self.provider = provider
+        self.is_generating = False
+
     def compose(self) -> ComposeResult:
         from textual.containers import Vertical
         with Vertical(id="main_container"):
-            yield Label(f" Generating auto-commit with [yellow]{self.model}[/yellow] using [cyan]{self.provider}[/cyan].")
-            yield Label(" [gray]Standard keybinds apply[/gray]")
+            yield Label(" [gray]Standard keybinds apply. Model switching is unavailable in this mode.[/gray]")
+            yield Label(f" [gray]Generating auto-commit with[/gray] [yellow]{self.model}[/yellow] [gray]using[/gray] [cyan]{self.provider}[/cyan][gray].[/gray]")
             yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
 
-    def query_one(self, selector, expect_type=None):
-        if selector == "#input":
-            return super().query_one(selector, expect_type)
-        return DummyWidget()
-
-    def action_regenerate_action(self) -> None:
-        textArea = super().query_one("#input", TextArea)
-        textArea.text = ""
+    def on_mount(self) -> None:
         self.regenerate()
 
+    def regenerate(self) -> None:
+        if getattr(self, "is_generating", False):
+            return
+        self.is_generating = True
+        self.query_one("#input", TextArea).text = "Generating..."
+        import threading
+        def run():
+            headless_auto_commit(
+                self.provider, self.model, self.diff, self.file_status, self.commits,
+                do_commit=False, do_push=False, chunk_callback=self.update_textarea, quiet=True
+            )
+        threading.Thread(target=run, daemon=True).start()
+
+    def update_textarea(self, message: str, finished: bool) -> None:
+        self.call_from_thread(self._do_update_textarea, message, finished)
+        
+    def _do_update_textarea(self, message: str, finished: bool) -> None:
+        try:
+            textArea = self.query_one("#input", TextArea)
+            textArea.text = message
+        except Exception:
+            pass
+        if finished:
+            self.is_generating = False
+
+    def action_regenerate_action(self) -> None:
+        if not self.is_generating:
+            self.regenerate()
+
     def action_commit_action(self) -> None:
-        textArea = super().query_one("#input", TextArea)
+        if self.is_generating:
+            return
+        textArea = self.query_one("#input", TextArea)
         finalMessage = textArea.text.strip()
         import subprocess
         subprocess.run(["git", "commit", "-m", finalMessage], capture_output=True)
