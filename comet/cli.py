@@ -267,9 +267,10 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
 
     message = extract_json_message(buffer)
     if not message:
-        _print(f"\033[31mFailed to generate a valid commit message. Output was: {buffer}\033[0m")
+        err_msg = buffer if buffer else "Error: Received empty response from API."
+        _print(f"\033[31mFailed to generate a valid commit message. Output was: {err_msg}\033[0m")
         if chunk_callback:
-            chunk_callback(buffer, True)
+            chunk_callback(err_msg, True)
         return
         
     _print(f"\n\033[32mGenerated Message:\033[0m\n{message}\n")
@@ -1022,8 +1023,8 @@ class CometTUI(App):
                                             self.received_first_chunk = True
                                             self.call_from_thread(self.update_textarea, msg, False)
                             message = extract_json_message(buffer)
-                            if not message and buffer:
-                                message = buffer
+                            if not message:
+                                message = buffer if buffer else "Error: Received empty response from API."
                         else:
                             message = "Error: Failed to fetch response."
                     except Exception as e:
@@ -1060,8 +1061,8 @@ class CometTUI(App):
                                             self.received_first_chunk = True
                                             self.call_from_thread(self.update_textarea, msg, False)
                             message = extract_json_message(buffer)
-                            if not message and buffer:
-                                message = buffer
+                            if not message:
+                                message = buffer if buffer else "Error: Received empty response from API."
                         else:
                             message = "Error: Failed to fetch response."
                     except Exception as e:

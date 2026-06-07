@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cli-comet"
-version = "1.3.5"
+version = "1.4"
 description = "A terminal UI that automatically generates commit messages using Ollama or Openrouter or LMStudio."
 readme = "README.md"
 requires-python = ">=3.10"
