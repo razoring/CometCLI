@@ -7,7 +7,7 @@ Comet is a lightweight disposable terminal user interface application that autom
 >
 > An unoptimized `git diff` can easily consume **15,000+ tokens** per request. If an average developer makes **3 commits per hour**, a standard 4-hour coding session would blast through over **180,000 tokens**!
 >
-> Comet uses only **500/hr tokens**! Saving you roughly **174,000 tokens** of unnecessary API costs in the same 4 hours!
+> Comet uses only **1500/hr tokens**! Saving you roughly **174,000 tokens** of unnecessary API costs in the same 4 hours!
 
 ## Features
 
