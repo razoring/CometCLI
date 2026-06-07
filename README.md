@@ -1,7 +1,7 @@
 # Comet CLI
 [![marketing.png](https://i.postimg.cc/QC64tWz4/marketing.png)](https://postimg.cc/gLZqtrm8)
 
-Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models (Ollama, LMStudio) or the cloud (OpenRouter). It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
+Comet is a lightweight disposable terminal user interface application that automatically generates descriptive git commit messages using local language models (Ollama, LMStudio) or the cloud (OpenRouter). It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
 
 > AI commit messages are silently burning through your API limits.
 >
