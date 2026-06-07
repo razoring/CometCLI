@@ -53,6 +53,8 @@ def extract_json_message(buffer: str) -> str:
                 text = m.group(2)
                 
     if commit_type and text:
+        if text.lower().startswith(commit_type.lower() + ":"):
+            text = text[len(commit_type) + 1:].strip()
         return f"{commit_type}: {text}"
     elif text:
         return text
@@ -478,7 +480,9 @@ def main_git_auto():
     status = subprocess.run(["git", "diff", "--name-status", "HEAD"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     commits = subprocess.run(["git", "log", "-n", "5", "--oneline"], cwd=os.getcwd(), capture_output=True, text=True, check=True, encoding="utf-8").stdout
     
-    headless_auto_commit(provider, model, diff, status, commits, do_commit=False, do_push=False)
+    app = GitAutoTUI(commit="Generating...", model=model, diff=diff, file_status=status, commits=commits, allModels=[], provider=provider, client=None)
+    result = app.run()
+    if result: print(result)
 
 from textual.app import App, ComposeResult
 from textual.widgets import TextArea, Button, Label
@@ -1161,5 +1165,61 @@ class CometTUI(App):
             self.query_one("#input_row").border_title = title
         except Exception:
             pass
+
+class DummyWidget:
+    disabled = False
+    display = False
+    label = ""
+    border_title = ""
+    def remove_class(self, *a, **k): pass
+    def has_class(self, *a, **k): return False
+    def press(self): pass
+
+class GitAutoTUI(CometTUI):
+    DEFAULT_CSS = """
+    Screen { background: transparent; overflow: hidden; scrollbar-size: 0 0; }
+    #main_container {
+        width: 100%;
+        height: 100%;
+        background: #1e1e1e;
+        overflow: hidden;
+    }
+    #input { 
+        width: 100%; 
+        height: 1fr; 
+        border: none; 
+        background: transparent; 
+        scrollbar-size: 0 0; 
+        overflow: hidden hidden; 
+    }
+    #input > .text-area--cursor-line { background: transparent; }
+    """
+
+    def compose(self) -> ComposeResult:
+        from textual.containers import Vertical
+        with Vertical(id="main_container"):
+            yield Label(f" Generating auto-commit with [yellow]{self.model}[/yellow] using [cyan]{self.provider}[/cyan].")
+            yield Label(" [gray]Standard keybinds apply[/gray]")
+            yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
+
+    def query_one(self, selector, expect_type=None):
+        if selector == "#input":
+            return super().query_one(selector, expect_type)
+        return DummyWidget()
+
+    def action_regenerate_action(self) -> None:
+        textArea = super().query_one("#input", TextArea)
+        textArea.text = ""
+        self.regenerate()
+
+    def action_commit_action(self) -> None:
+        textArea = super().query_one("#input", TextArea)
+        finalMessage = textArea.text.strip()
+        import subprocess
+        subprocess.run(["git", "commit", "-m", finalMessage], capture_output=True)
+        self.exit()
+
+    def action_exit_action(self) -> None:
+        self.exit()
 
 if __name__ == "__main__": main()
