@@ -1230,6 +1230,7 @@ class GitAutoTUI(App):
     def compose(self) -> ComposeResult:
         from textual.containers import Vertical
         with Vertical(id="main_container"):
+            yield Label(" This feature does not auto-sync. Please use [red]comet[/red] or [red]comet -a[/red].")
             yield Label(" [gray]Standard keybinds apply. Model switching is unavailable in this mode.[/gray]")
             yield Label(f" [gray]Generating auto-commit with[/gray] [yellow]{self.model}[/yellow] [gray]using[/gray] [cyan]{self.provider}[/cyan][gray].[/gray]")
             yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
