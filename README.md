@@ -1,13 +1,13 @@
 # Comet CLI
-![Image](https://i.postimg.cc/6pjVR0jn/marketing.png)
+[![marketing.png](https://i.postimg.cc/QC64tWz4/marketing.png)](https://postimg.cc/gLZqtrm8)
 
-Comet is a terminal user interface application that automatically generates descriptive git commit messages using local language models (Ollama, LMStudio) or the cloud (OpenRouter). It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
+Comet is a lightweight disposable terminal user interface application that automatically generates descriptive git commit messages using local language models (Ollama, LMStudio) or the cloud (OpenRouter). It analyzes your staged git diffs and provides a clean interface to review, edit, regenerate, and commit your changes instantly.
 
 > AI commit messages are silently burning through your API limits.
 >
 > An unoptimized `git diff` can easily consume **15,000+ tokens** per request. If an average developer makes **3 commits per hour**, a standard 4-hour coding session would blast through over **180,000 tokens**!
 >
-> Comet uses only **500 tokens**! Saving you roughly **174,000 tokens** of unnecessary API costs in the same 4 hours!
+> Comet uses only **500/hr tokens**! Saving you roughly **174,000 tokens** of unnecessary API costs in the same 4 hours!
 
 ## Features
 
