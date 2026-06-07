@@ -1197,7 +1197,7 @@ class GitAutoTUI(App):
     #main_container {
         width: 100%;
         height: 100%;
-        background: #1e1e1e;
+        background: #181818;
         overflow: hidden;
     }
     #input { 
@@ -1230,7 +1230,7 @@ class GitAutoTUI(App):
     def compose(self) -> ComposeResult:
         from textual.containers import Vertical
         with Vertical(id="main_container"):
-            yield Label(" This feature is for supervised control. There is no auto-sync or model switching. Please use [gray]comet[/gray] or [gray]comet -a[/gray] for automation.")
+            yield Label(" There is no auto-sync, hotswapping, or settings in this mode. Please use [gray]comet[/gray] or [gray]comet -a[/gray] for slower functionality.")
             yield Label(" [gray]Standard keybinds apply. Model switching is unavailable in this mode.[/gray]")
             yield Label(f" [gray]Generating auto-commit with[/gray] [yellow]{self.model}[/yellow] [gray]using[/gray] [cyan]{self.provider}[/cyan][gray].[/gray]")
             yield CustomTextArea(self.commit, id="input", show_line_numbers=False)
