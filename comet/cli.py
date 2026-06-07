@@ -11,6 +11,10 @@ import random
 
 COMMIT_RESPONSE_SCHEMA = {
     "properties": {
+        "type": {
+            "description": "The conventional commit type (e.g. feat, fix, refactor).",
+            "type": "string"
+        },
         "commit_message": {
             "description": "The concise commit message. DO NOT output diffs. STRICTLY limit to 150 characters.",
             "maxLength": 150,
@@ -18,27 +22,44 @@ COMMIT_RESPONSE_SCHEMA = {
             "type": "string"
         }
     },
-    "required": ["commit_message"],
+    "required": ["type", "commit_message"],
     "title": "CommitResponse",
     "type": "object"
 }
 
 def extract_json_message(buffer: str) -> str:
-    match = re.search(r'"commit_message"\s*:\s*"(.*)', buffer, re.DOTALL)
-    if match:
-        text = match.group(1)
-        text = text.rstrip(" \n\r\t}")
-        if text.endswith('"'): text = text[:-1]
+    type_match = re.search(r'"type"\s*:\s*"([^"]*)', buffer)
+    commit_type = type_match.group(1).strip() if type_match else ""
+    
+    msg_match = re.search(r'"commit_message"\s*:\s*"((?:[^"\\]|\\.)*)', buffer)
+    text = ""
+    if msg_match:
+        text = msg_match.group(1)
         text = text.replace('\\n', '\n').replace('\\"', '"')
         text = text.strip()
         if '\n' in text:
-            #discard everything after newline
             text = text.split('\n')[0]
+            
+    if not commit_type and text:
+        m = re.match(r'^\[?([a-zA-Z]+)\]?:\s*(.*)', text)
+        if m:
+            commit_type = m.group(1).lower()
+            text = m.group(2)
+        else:
+            m = re.match(r'^\[([a-zA-Z]+)\]\s+(.*)', text)
+            if m:
+                commit_type = m.group(1).lower()
+                text = m.group(2)
+                
+    if commit_type and text:
+        return f"{commit_type}: {text}"
+    elif text:
         return text
+    elif commit_type:
+        return f"{commit_type}: "
 
     if buffer.lstrip().startswith("{"): return ""
     if '\n' in buffer:
-        #discard everything after newline
         buffer = buffer.split('\n')[0]
     return buffer
 
@@ -76,10 +97,12 @@ def load_settings():
                 settings = json.load(f)
                 if "quickStartup" not in settings:
                     settings["quickStartup"] = True
+                if "autoModelUpscale" not in settings:
+                    settings["autoModelUpscale"] = True
                 return settings
         except Exception:
             pass
-    return {"quickStartup": True}
+    return {"quickStartup": True, "autoModelUpscale": True}
 
 def save_settings(provider, model):
     path = get_settings_path()
@@ -107,8 +130,8 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
     
     client = None
     if provider == "auto":
-        lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
-        ollamaUp = check_endpoint("http://localhost:11434/api/tags")
+        lmstudioUp = check_endpoint("http://127.0.0.1:1234/v1/models")
+        ollamaUp = check_endpoint("http://127.0.0.1:11434/api/tags")
         if lmstudioUp and not ollamaUp:
             provider = "lmstudio"
         else:
@@ -116,10 +139,10 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
 
     if provider == "ollama":
         try:
-            tags = fetch_json("http://localhost:11434/api/tags") or {}
+            tags = fetch_json("http://127.0.0.1:11434/api/tags") or {}
             allModelsData = sorted(tags.get("models", []), key=lambda m: m.get("size", 0))
             allModels = [m["name"] for m in allModelsData if "name" in m]
-            ps = fetch_json("http://localhost:11434/api/ps") or {}
+            ps = fetch_json("http://127.0.0.1:11434/api/ps") or {}
             loadedModels = ps.get("models", [])
             defaultModel = loadedModels[0]["name"] if loadedModels else (allModels[0] if allModels else "unknown")
         except Exception:
@@ -127,7 +150,7 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
             defaultModel = "unknown"
     elif provider == "lmstudio":
         try:
-            data = fetch_json("http://localhost:1234/v1/models") or {}
+            data = fetch_json("http://127.0.0.1:1234/v1/models") or {}
             allModels = [m["id"] for m in data.get("data", []) if "id" in m]
             defaultModel = allModels[0] if allModels else "unknown"
         except Exception:
@@ -163,12 +186,16 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
     buffer = ""
     try:
         if provider == "ollama":
+            diff_len = len(diff)
+            options = {"temperature": 0.9}
+            if diff_len > 4000:
+                options["num_ctx"] = min(16384, (diff_len // 3) + 1000)
             payload = {
                 "model": model, "messages": messages, "stream": True,
-                "options": {"temperature": 0.9, "seed": random.randint(0, 1000000)},
-                "keep_alive": "60m", "format": COMMIT_RESPONSE_SCHEMA
+                "options": options,
+                "keep_alive": "60m"
             }
-            resp = stream_json("http://localhost:11434/api/chat", data=payload, timeout=60.0)
+            resp = stream_json("http://127.0.0.1:11434/api/chat", data=payload, timeout=60.0)
             if resp:
                 for line in resp:
                     if line:
@@ -188,7 +215,7 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
                 return None
         elif provider in ["lmstudio", "openrouter"]:
             settings = load_settings()
-            base_url = "http://localhost:1234/v1" if provider == "lmstudio" else "https://openrouter.ai/api/v1"
+            base_url = "http://127.0.0.1:1234/v1" if provider == "lmstudio" else "https://openrouter.ai/api/v1"
             api_key = "lm-studio" if provider == "lmstudio" else (os.getenv("OPENROUTER_API_KEY") or settings.get("openrouter_api_key", ""))
             payload = {
                 "model": model, "messages": messages, "temperature": 0.9, "stream": True,
@@ -277,8 +304,8 @@ def run_init():
     print(f"\033[36mInitializing Comet CLI...\033[0m")
     
     provider = "auto"
-    lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
-    ollamaUp = check_endpoint("http://localhost:11434/api/tags")
+    lmstudioUp = check_endpoint("http://127.0.0.1:1234/v1/models")
+    ollamaUp = check_endpoint("http://127.0.0.1:11434/api/tags")
     if lmstudioUp and not ollamaUp:
         provider = "lmstudio"
     else:
@@ -293,7 +320,7 @@ def run_init():
     model = ""
     if provider == "ollama":
         try:
-            tags = fetch_json("http://localhost:11434/api/tags") or {}
+            tags = fetch_json("http://127.0.0.1:11434/api/tags") or {}
             modelsData = sorted(tags.get("models", []), key=lambda m: m.get("size", 0))
             allModels = [m["name"] for m in modelsData if "name" in m]
             model = allModels[0] if allModels else "unknown"
@@ -301,7 +328,7 @@ def run_init():
             model = "unknown"
     elif provider == "lmstudio":
         try:
-            data = fetch_json("http://localhost:1234/v1/models") or {}
+            data = fetch_json("http://127.0.0.1:1234/v1/models") or {}
             allModels = [m["id"] for m in data.get("data", []) if "id" in m]
             model = allModels[0] if allModels else "unknown"
         except Exception:
@@ -322,7 +349,7 @@ def run_init():
         try:
             print(f"\033[36mPreloading model {model} with a 3 hour TTL...\033[0m")
             import urllib.request, json
-            req = urllib.request.Request("http://localhost:11434/api/generate", data=json.dumps({"model": model, "keep_alive": "3h"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
+            req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=json.dumps({"model": model, "keep_alive": "3h"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
             with urllib.request.urlopen(req, timeout=5.0) as _:
                 pass
             print(f"\033[32mModel preloaded successfully!\033[0m")
@@ -353,15 +380,15 @@ def run_warmup():
             model = settings.get("model", "")
             if model and model != "unknown":
                 import urllib.request, json
-                req = urllib.request.Request("http://localhost:11434/api/generate", data=json.dumps({"model": model, "keep_alive": "3h"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
+                req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=json.dumps({"model": model, "keep_alive": "3h"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
                 with urllib.request.urlopen(req, timeout=5.0) as _: pass
             else:
-                fetch_json("http://localhost:11434/api/tags")
+                fetch_json("http://127.0.0.1:11434/api/tags")
         except Exception:
             pass
     elif provider == "lmstudio":
         try:
-            fetch_json("http://localhost:1234/v1/models")
+            fetch_json("http://127.0.0.1:1234/v1/models")
         except Exception:
             pass
 
@@ -679,6 +706,13 @@ class CometTUI(App):
 
     def action_regenerate_action(self) -> None:
         regenBtn = self.query_one("#regenBtn", Button)
+        if getattr(self, "is_counting_down", False):
+            self.is_counting_down = False
+            self.model = getattr(self, "upscale_original_model", self.model)
+            self.query_one("#input_row").border_title = f"{self.model}"
+            self.regenerate()
+            return
+            
         if not regenBtn.disabled:
             regenBtn.press()
 
@@ -747,7 +781,7 @@ class CometTUI(App):
             if self.provider == "ollama" and getattr(self, "model", ""):
                 try:
                     import urllib.request, json
-                    req = urllib.request.Request("http://localhost:11434/api/generate", data=json.dumps({"model": self.model, "keep_alive": "60m"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
+                    req = urllib.request.Request("http://127.0.0.1:11434/api/generate", data=json.dumps({"model": self.model, "keep_alive": "60m"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
                     with urllib.request.urlopen(req, timeout=1.0) as _: pass
                 except Exception:
                     pass
@@ -774,8 +808,8 @@ class CometTUI(App):
     def initialize_llm(self) -> None:
         def run():
             if self.provider == "auto":
-                lmstudioUp = check_endpoint("http://localhost:1234/v1/models")
-                ollamaUp = check_endpoint("http://localhost:11434/api/tags")
+                lmstudioUp = check_endpoint("http://127.0.0.1:1234/v1/models")
+                ollamaUp = check_endpoint("http://127.0.0.1:11434/api/tags")
                 if lmstudioUp and not ollamaUp:
                     self.provider = "lmstudio"
                 else:
@@ -783,10 +817,10 @@ class CometTUI(App):
 
             if self.provider == "ollama":
                 try:
-                    tags = fetch_json("http://localhost:11434/api/tags") or {}
+                    tags = fetch_json("http://127.0.0.1:11434/api/tags") or {}
                     allModelsData = sorted(tags.get("models", []), key=lambda m: m.get("size", 0))
                     self.allModels = [m["name"] for m in allModelsData if "name" in m]
-                    ps = fetch_json("http://localhost:11434/api/ps") or {}
+                    ps = fetch_json("http://127.0.0.1:11434/api/ps") or {}
                     loadedModels = ps.get("models", [])
                     defaultModel = loadedModels[0]["name"] if loadedModels else (self.allModels[0] if self.allModels else "unknown")
                 except Exception:
@@ -794,7 +828,7 @@ class CometTUI(App):
                     defaultModel = "unknown"
             elif self.provider == "lmstudio":
                 try:
-                    data = fetch_json("http://localhost:1234/v1/models") or {}
+                    data = fetch_json("http://127.0.0.1:1234/v1/models") or {}
                     self.allModels = [m["id"] for m in data.get("data", []) if "id" in m]
                     defaultModel = self.allModels[0] if self.allModels else "unknown"
                 except Exception:
@@ -824,7 +858,42 @@ class CometTUI(App):
     def post_initialize_llm(self) -> None:
         self.query_one("#input_row").border_title = f"{self.model}"
         self.query_one("#commitBtn").disabled = False
+        
+        settings = load_settings()
+        if settings.get("autoModelUpscale", True) and len(self.allModels) > 1:
+            try:
+                curr_idx = self.allModels.index(self.model)
+                diff_tier = len(self.diff) // 15000
+                target_idx = min(len(self.allModels) - 1, curr_idx + diff_tier)
+                if target_idx > curr_idx:
+                    self.upscale_original_model = self.model
+                    self.model = self.allModels[target_idx]
+                    self.query_one("#input_row").border_title = f"{self.model}"
+                    self.is_counting_down = True
+                    self.query_one("#regenBtn").disabled = False
+                    self.notify(f"Diff is large. Auto-upscaling to {self.model}. Press Regenerate within 3s to cancel.", timeout=3.0)
+                    self.start_upscale_countdown()
+                    return
+            except ValueError:
+                pass
+                
         self.regenerate()
+
+    def start_upscale_countdown(self) -> None:
+        def run():
+            for i in range(3, 0, -1):
+                if not getattr(self, "is_counting_down", False):
+                    return
+                self.call_from_thread(self.update_textarea, f"Model auto-upscaled for large diff. Auto-generating in {i}...", False)
+                import time
+                time.sleep(1.0)
+            
+            if getattr(self, "is_counting_down", False):
+                self.is_counting_down = False
+                self.call_from_thread(self.regenerate)
+                
+        import threading
+        threading.Thread(target=run, daemon=True).start()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "commitBtn":
@@ -864,6 +933,10 @@ class CometTUI(App):
             self.action_undo_commit()
             
         elif event.button.id == "regenBtn":
+            if getattr(self, "is_counting_down", False):
+                self.is_counting_down = False
+                self.model = getattr(self, "upscale_original_model", self.model)
+                self.query_one("#input_row").border_title = f"{self.model}"
             event.button.disabled = True
             textArea = self.query_one("#input", TextArea)
             textArea.text = ""
@@ -880,6 +953,15 @@ class CometTUI(App):
                 subprocess.run(['xdg-open', settings_path])
 
     def regenerate(self) -> None:
+        def wait_and_show():
+            import time
+            time.sleep(1.5)
+            if self.is_generating and not getattr(self, "received_first_chunk", False):
+                self.call_from_thread(self.update_textarea, "Generating...", False)
+        import threading
+        self.received_first_chunk = False
+        threading.Thread(target=wait_and_show, daemon=True).start()
+
         def run():
             self.is_generating = True
             self.needs_poll = True
@@ -897,12 +979,16 @@ class CometTUI(App):
                     messages.append({"role": "user", "content": "Please provide a DIFFERENT summary. Do not repeat the previous ones."})
                 if self.provider == "ollama":
                     try:
+                        diff_len = len(self.diff)
+                        options = {"temperature": 0.9}
+                        if diff_len > 4000:
+                            options["num_ctx"] = min(16384, (diff_len // 3) + 1000)
                         payload = {
                             "model": self.model, "messages": messages, "stream": True,
-                            "options": {"temperature": 0.9, "seed": random.randint(0, 1000000)},
-                            "keep_alive": "60m", "format": COMMIT_RESPONSE_SCHEMA
+                            "options": options,
+                            "keep_alive": "60m"
                         }
-                        resp = stream_json("http://localhost:11434/api/chat", data=payload, timeout=60.0)
+                        resp = stream_json("http://127.0.0.1:11434/api/chat", data=payload, timeout=60.0)
                         buffer = ""
                         if resp:
                             for line in resp:
@@ -912,6 +998,7 @@ class CometTUI(App):
                                         buffer += chunk["message"]["content"]
                                         msg = extract_json_message(buffer)
                                         if msg:
+                                            self.received_first_chunk = True
                                             self.call_from_thread(self.update_textarea, msg, False)
                             message = extract_json_message(buffer)
                             if not message and buffer:
@@ -925,7 +1012,7 @@ class CometTUI(App):
                 elif self.provider in ["lmstudio", "openrouter"]:
                     try:
                         settings = load_settings()
-                        base_url = "http://localhost:1234/v1" if self.provider == "lmstudio" else "https://openrouter.ai/api/v1"
+                        base_url = "http://127.0.0.1:1234/v1" if self.provider == "lmstudio" else "https://openrouter.ai/api/v1"
                         api_key = "lm-studio" if self.provider == "lmstudio" else (os.getenv("OPENROUTER_API_KEY") or settings.get("openrouter_api_key", ""))
                         payload = {
                             "model": self.model, "messages": messages, "temperature": 0.9, "stream": True,
@@ -949,6 +1036,7 @@ class CometTUI(App):
                                         buffer += chunk["choices"][0]["delta"]["content"]
                                         msg = extract_json_message(buffer)
                                         if msg:
+                                            self.received_first_chunk = True
                                             self.call_from_thread(self.update_textarea, msg, False)
                             message = extract_json_message(buffer)
                             if not message and buffer:
@@ -1027,7 +1115,7 @@ class CometTUI(App):
 
                 if getattr(self, "needs_poll", False) and not self.is_generating:
                     try:
-                        ps = fetch_json("http://localhost:11434/api/ps") or {}
+                        ps = fetch_json("http://127.0.0.1:11434/api/ps") or {}
                         models = ps.get("models", [])
                         self._ollama_expires_at.clear()
                         for m in models:
