@@ -8,6 +8,7 @@ import urllib.error
 import importlib.metadata
 import re
 import random
+import sys
 
 COMMIT_RESPONSE_SCHEMA = {
     "properties": {
