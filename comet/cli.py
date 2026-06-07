@@ -166,7 +166,7 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
             payload = {
                 "model": model, "messages": messages, "stream": True,
                 "options": {"temperature": 0.9, "seed": random.randint(0, 1000000)},
-                "format": COMMIT_RESPONSE_SCHEMA
+                "keep_alive": "60m", "format": COMMIT_RESPONSE_SCHEMA
             }
             resp = stream_json("http://localhost:11434/api/chat", data=payload, timeout=60.0)
             if resp:
@@ -245,8 +245,15 @@ def headless_auto_commit(provider, model, diff, file_status, commits, do_commit=
     print(f"\033[36mPushing to remote...\033[0m")
     push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
     if push_res.returncode != 0:
-        print(f"\033[31mPush failed:\n{push_res.stderr}\033[0m")
-        return
+        print(f"\033[33mPush failed, attempting to pull and retry...\033[0m")
+        pull_res = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True)
+        if pull_res.returncode != 0:
+            print(f"\033[31mSync failed (resolve conflicts manually):\n{pull_res.stderr}\n{push_res.stderr}\033[0m")
+            return
+        push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
+        if push_res.returncode != 0:
+            print(f"\033[31mPush failed:\n{push_res.stderr}\033[0m")
+            return
         
     print(f"\033[32mComet committed and synced successfully!\033[0m")
     check_for_updates_cli()
@@ -704,6 +711,7 @@ class CometTUI(App):
         self.query_one("#regenBtn").disabled = True
         self.query_one("#commitBtn").disabled = True
         self.set_interval(2.0, self.update_status_loop)
+        self.set_interval(60.0, self.keep_alive_ping)
         
         try:
             from textual.color import Color
@@ -733,6 +741,18 @@ class CometTUI(App):
 
         self.initialize_llm()
         self.check_for_updates()
+
+    def keep_alive_ping(self) -> None:
+        def run():
+            if self.provider == "ollama" and getattr(self, "model", ""):
+                try:
+                    import urllib.request, json
+                    req = urllib.request.Request("http://localhost:11434/api/generate", data=json.dumps({"model": self.model, "keep_alive": "60m"}).encode('utf-8'), headers={'Content-Type': 'application/json'})
+                    with urllib.request.urlopen(req, timeout=1.0) as _: pass
+                except Exception:
+                    pass
+        import threading
+        threading.Thread(target=run, daemon=True).start()
 
     def check_for_updates(self) -> None:
         def run():
@@ -811,7 +831,16 @@ class CometTUI(App):
             if str(event.button.label).strip() == "Sync  ➤":
                 event.button.label = "Syncing..."
                 event.button.disabled = True
-                subprocess.run(["git", "push"], capture_output=True)
+                push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
+                if push_res.returncode != 0:
+                    pull_res = subprocess.run(["git", "pull", "--rebase"], capture_output=True, text=True)
+                    if pull_res.returncode != 0:
+                        self.exit(f"\033[31mSync failed (resolve conflicts manually):\n{pull_res.stderr}\n{push_res.stderr}\033[0m")
+                        return
+                    push_res = subprocess.run(["git", "push"], capture_output=True, text=True)
+                    if push_res.returncode != 0:
+                        self.exit(f"\033[31mPush failed:\n{push_res.stderr}\033[0m")
+                        return
                 self.exit(f"\033[32mComet committed and synced successfully! \033[0m")
                 return
 
